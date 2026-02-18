@@ -4,6 +4,7 @@ import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import com.flutterwallpaperplus.models.ResultPayload
@@ -78,9 +79,12 @@ class WallpaperMethodHandler(
         result: MethodChannel.Result
     ) {
         scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            var outcome = "unknown"
             try {
                 val args = call.arguments as? Map<String, Any?>
                 if (args == null) {
+                    outcome = "invalid_args"
                     result.success(
                         ResultPayload.error(
                             "Invalid arguments passed to setImageWallpaper",
@@ -93,6 +97,7 @@ class WallpaperMethodHandler(
                 val config = try {
                     WallpaperConfig.fromMap(args)
                 } catch (e: IllegalArgumentException) {
+                    outcome = "invalid_config"
                     result.success(
                         ResultPayload.error(
                             "Invalid configuration: ${e.message}",
@@ -103,6 +108,7 @@ class WallpaperMethodHandler(
                 }
 
                 if (!config.isValid()) {
+                    outcome = "invalid_source"
                     val payload = ResultPayload.error(
                         "Invalid source configuration: "
                                 + "type='${config.sourceType}', "
@@ -115,6 +121,7 @@ class WallpaperMethodHandler(
                 }
 
                 if (!PermissionHelper.hasWallpaperPermission(context)) {
+                    outcome = "permission_denied"
                     val payload = ResultPayload.error(
                         "SET_WALLPAPER permission is not granted.",
                         "permissionDenied"
@@ -128,6 +135,7 @@ class WallpaperMethodHandler(
                     if (!isAppInternalPath(config.sourcePath) &&
                         !PermissionHelper.hasStorageReadPermission(context)
                     ) {
+                        outcome = "permission_denied"
                         val payload = ResultPayload.error(
                             "Storage read permission is required to access "
                                     + "files outside the app directory.",
@@ -139,9 +147,11 @@ class WallpaperMethodHandler(
                     }
                 }
 
+                val resolveStarted = SystemClock.elapsedRealtime()
                 val file = try {
                     sourceResolver.resolve(config.sourceType, config.sourcePath)
                 } catch (e: SourceResolver.SourceNotFoundException) {
+                    outcome = "source_not_found"
                     val payload = ResultPayload.error(
                         e.message ?: "Source not found", "sourceNotFound"
                     )
@@ -149,6 +159,7 @@ class WallpaperMethodHandler(
                     result.success(payload.toMap())
                     return@launch
                 } catch (e: CacheManager.DownloadException) {
+                    outcome = "download_failed"
                     val payload = ResultPayload.error(
                         e.message ?: "Download failed", "downloadFailed"
                     )
@@ -156,8 +167,19 @@ class WallpaperMethodHandler(
                     result.success(payload.toMap())
                     return@launch
                 }
+                Log.d(
+                    TAG,
+                    "setImageWallpaper source resolved in "
+                            + "${SystemClock.elapsedRealtime() - resolveStarted}ms"
+                )
 
+                val applyStarted = SystemClock.elapsedRealtime()
                 val payload = imageWallpaperManager.setWallpaper(file, config)
+                Log.d(
+                    TAG,
+                    "setImageWallpaper wallpaper apply finished in "
+                            + "${SystemClock.elapsedRealtime() - applyStarted}ms"
+                )
 
                 showToastIfNeeded(
                     config.showToast,
@@ -165,14 +187,22 @@ class WallpaperMethodHandler(
                     else config.errorMessage
                 )
 
+                outcome = if (payload.success) "success" else payload.errorCode
                 result.success(payload.toMap())
 
             } catch (e: Exception) {
+                outcome = "exception"
                 Log.e(TAG, "setImageWallpaper: unexpected exception", e)
                 result.success(
                     ResultPayload.error(
                         "Unexpected error: ${e.message ?: "Unknown"}", "unknown"
                     ).toMap()
+                )
+            } finally {
+                Log.d(
+                    TAG,
+                    "setImageWallpaper finished: outcome=$outcome, "
+                            + "total=${SystemClock.elapsedRealtime() - startedAt}ms"
                 )
             }
         }
@@ -188,9 +218,12 @@ class WallpaperMethodHandler(
         result: MethodChannel.Result
     ) {
         scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            var outcome = "unknown"
             try {
                 val args = call.arguments as? Map<String, Any?>
                 if (args == null) {
+                    outcome = "invalid_args"
                     result.success(
                         ResultPayload.error(
                             "Invalid arguments passed to setVideoWallpaper",
@@ -203,6 +236,7 @@ class WallpaperMethodHandler(
                 val config = try {
                     WallpaperConfig.fromMap(args)
                 } catch (e: IllegalArgumentException) {
+                    outcome = "invalid_config"
                     result.success(
                         ResultPayload.error(
                             "Invalid configuration: ${e.message}",
@@ -213,6 +247,7 @@ class WallpaperMethodHandler(
                 }
 
                 if (!config.isValid()) {
+                    outcome = "invalid_source"
                     val payload = ResultPayload.error(
                         "Invalid source configuration: "
                                 + "type='${config.sourceType}', "
@@ -225,6 +260,7 @@ class WallpaperMethodHandler(
                 }
 
                 if (!PermissionHelper.supportsLiveWallpaper(context)) {
+                    outcome = "unsupported"
                     val payload = ResultPayload.error(
                         "Live wallpapers are not supported on this device.",
                         "unsupported"
@@ -238,6 +274,7 @@ class WallpaperMethodHandler(
                     if (!isAppInternalPath(config.sourcePath) &&
                         !PermissionHelper.hasStorageReadPermission(context)
                     ) {
+                        outcome = "permission_denied"
                         val payload = ResultPayload.error(
                             "Storage read permission is required to access "
                                     + "files outside the app directory.",
@@ -249,9 +286,11 @@ class WallpaperMethodHandler(
                     }
                 }
 
+                val resolveStarted = SystemClock.elapsedRealtime()
                 val file = try {
                     sourceResolver.resolve(config.sourceType, config.sourcePath)
                 } catch (e: SourceResolver.SourceNotFoundException) {
+                    outcome = "source_not_found"
                     val payload = ResultPayload.error(
                         e.message ?: "Source not found", "sourceNotFound"
                     )
@@ -259,6 +298,7 @@ class WallpaperMethodHandler(
                     result.success(payload.toMap())
                     return@launch
                 } catch (e: CacheManager.DownloadException) {
+                    outcome = "download_failed"
                     val payload = ResultPayload.error(
                         e.message ?: "Download failed", "downloadFailed"
                     )
@@ -266,6 +306,11 @@ class WallpaperMethodHandler(
                     result.success(payload.toMap())
                     return@launch
                 }
+                Log.d(
+                    TAG,
+                    "setVideoWallpaper source resolved in "
+                            + "${SystemClock.elapsedRealtime() - resolveStarted}ms"
+                )
 
                 val prefs = context.getSharedPreferences(
                     VideoWallpaperService.PREFS_NAME,
@@ -279,6 +324,7 @@ class WallpaperMethodHandler(
                     .commit()
 
                 if (!saved) {
+                    outcome = "prefs_save_failed"
                     val payload = ResultPayload.error(
                         "Failed to save wallpaper configuration",
                         "applyFailed"
@@ -291,21 +337,30 @@ class WallpaperMethodHandler(
                 val launchResult = launchLiveWallpaperChooser()
 
                 if (launchResult.success) {
+                    outcome = "chooser_opened"
                     showToastIfNeeded(config.showToast, config.successMessage)
                     result.success(
                         ResultPayload.success(config.successMessage).toMap()
                     )
                 } else {
+                    outcome = launchResult.errorCode
                     showToastIfNeeded(config.showToast, config.errorMessage)
                     result.success(launchResult.toMap())
                 }
 
             } catch (e: Exception) {
+                outcome = "exception"
                 Log.e(TAG, "setVideoWallpaper: unexpected exception", e)
                 result.success(
                     ResultPayload.error(
                         "Unexpected error: ${e.message ?: "Unknown"}", "unknown"
                     ).toMap()
+                )
+            } finally {
+                Log.d(
+                    TAG,
+                    "setVideoWallpaper finished: outcome=$outcome, "
+                            + "total=${SystemClock.elapsedRealtime() - startedAt}ms"
                 )
             }
         }

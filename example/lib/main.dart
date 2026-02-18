@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_wallpaper_plus/flutter_wallpaper_plus.dart';
 
 void main() {
+  debugPrint('[ExampleDart] main()');
   runApp(const WallpaperPlusExample());
 }
 
@@ -41,6 +42,22 @@ class _HomePageState extends State<HomePage> {
   String _status = 'Ready';
   bool _isLoading = false;
   Uint8List? _thumbnailBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    debugPrint('[ExampleDart] HomePage initState');
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    debugPrint('[ExampleDart] HomePage dispose');
+    super.dispose();
+  }
+
+  final _lifecycleObserver = _ExampleLifecycleObserver();
 
   // ================================================================
   // Sample URLs — replace with your own for testing
@@ -291,6 +308,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('[ExampleDart] HomePage build');
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -466,5 +484,12 @@ class _HomePageState extends State<HomePage> {
       icon: Icon(icon, size: 18),
       label: Text(label),
     );
+  }
+}
+
+class _ExampleLifecycleObserver extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('[ExampleDart] AppLifecycleState: $state');
   }
 }

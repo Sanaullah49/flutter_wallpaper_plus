@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] — 2026-02-18
 
+### Changed
+- Android live wallpaper service label now inherits the host app label, so the picker shows the app name instead of a hardcoded "Video Wallpaper" label.
+
+### Fixed
+- Android example app no longer goes black/white after wallpaper apply on OEMs that recreate the activity (e.g., MIUI): `MainActivity` now reuses a cached `FlutterEngine` across host activity recreation.
+
 ### Added
 
 #### Image Wallpaper
