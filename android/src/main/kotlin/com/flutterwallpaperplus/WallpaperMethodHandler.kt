@@ -1,6 +1,9 @@
 package com.flutterwallpaperplus
 
+import android.app.WallpaperManager
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import com.flutterwallpaperplus.models.ResultPayload
@@ -48,7 +51,6 @@ class WallpaperMethodHandler(
 
     /**
      * Lazy-initialized managers — created only when first needed.
-     * This avoids unnecessary work if the user never calls certain methods.
      */
     private val cacheManager: CacheManager by lazy {
         CacheManager(context)
@@ -66,10 +68,6 @@ class WallpaperMethodHandler(
 
     /**
      * Routes incoming method calls to the appropriate handler.
-     *
-     * IMPORTANT: MethodChannel.Result must be called exactly once.
-     * Every code path (success, error, unimplemented) must call
-     * result.success(), result.error(), or result.notImplemented().
      */
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         Log.d(TAG, "Method called: ${call.method}")
@@ -92,21 +90,6 @@ class WallpaperMethodHandler(
     // PHASE 2 — Image Wallpaper (FULLY IMPLEMENTED)
     // ================================================================
 
-    /**
-     * Handles the setImageWallpaper method call.
-     *
-     * Flow:
-     * 1. Parse arguments into WallpaperConfig
-     * 2. Validate config
-     * 3. Check permissions
-     * 4. Resolve source to local file (download if URL, extract if asset)
-     * 5. Apply wallpaper via ImageWallpaperManager
-     * 6. Show toast if enabled
-     * 7. Return structured result
-     *
-     * Every step that can fail returns a ResultPayload with an
-     * appropriate error code — no exceptions escape to the caller.
-     */
     @Suppress("UNCHECKED_CAST")
     private fun handleSetImageWallpaper(
         call: MethodCall,
@@ -114,8 +97,6 @@ class WallpaperMethodHandler(
     ) {
         scope.launch {
             try {
-                // --- Step 1: Parse arguments ---
-
                 val args = call.arguments as? Map<String, Any?>
                 if (args == null) {
                     Log.e(TAG, "setImageWallpaper: null or invalid arguments")
@@ -141,8 +122,6 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
-                // --- Step 2: Validate config ---
-
                 if (!config.isValid()) {
                     Log.e(TAG, "setImageWallpaper: config validation failed")
                     val payload = ResultPayload.error(
@@ -156,15 +135,11 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
-                // --- Step 3: Check permissions ---
-
+                // Check permissions
                 if (!PermissionHelper.hasWallpaperPermission(context)) {
                     Log.w(TAG, "setImageWallpaper: SET_WALLPAPER not granted")
                     val payload = ResultPayload.error(
-                        "SET_WALLPAPER permission is not granted. "
-                                + "This is usually auto-granted at install time. "
-                                + "If you see this error, the device may have "
-                                + "restrictions.",
+                        "SET_WALLPAPER permission is not granted.",
                         "permissionDenied"
                     )
                     showToastIfNeeded(config.showToast, config.errorMessage)
@@ -172,17 +147,13 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
-                // For file sources, check storage permission if needed
                 if (config.sourceType == "file") {
                     if (!isAppInternalPath(config.sourcePath) &&
                         !PermissionHelper.hasStorageReadPermission(context)
                     ) {
-                        Log.w(TAG, "setImageWallpaper: storage read not granted")
                         val payload = ResultPayload.error(
                             "Storage read permission is required to access "
-                                    + "files outside the app directory. "
-                                    + "Request READ_EXTERNAL_STORAGE (API < 33) or "
-                                    + "READ_MEDIA_IMAGES (API 33+) in your app.",
+                                    + "files outside the app directory.",
                             "permissionDenied"
                         )
                         showToastIfNeeded(config.showToast, config.errorMessage)
@@ -191,11 +162,7 @@ class WallpaperMethodHandler(
                     }
                 }
 
-                // --- Step 4: Resolve source to local file ---
-
-                Log.d(TAG, "setImageWallpaper: resolving source "
-                        + "type=${config.sourceType}, path=${config.sourcePath}")
-
+                // Resolve source to local file
                 val file = try {
                     sourceResolver.resolve(config.sourceType, config.sourcePath)
                 } catch (e: SourceResolver.SourceNotFoundException) {
@@ -218,14 +185,8 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
-                Log.d(TAG, "setImageWallpaper: source resolved to "
-                        + "${file.absolutePath} (${file.length()} bytes)")
-
-                // --- Step 5: Apply wallpaper ---
-
+                // Apply wallpaper
                 val payload = imageWallpaperManager.setWallpaper(file, config)
-
-                // --- Step 6: Show toast ---
 
                 val toastMessage = if (payload.success) {
                     config.successMessage
@@ -234,17 +195,9 @@ class WallpaperMethodHandler(
                 }
                 showToastIfNeeded(config.showToast, toastMessage)
 
-                // --- Step 7: Return result ---
-
-                Log.d(TAG, "setImageWallpaper: result=${payload.success}, "
-                        + "message=${payload.message}")
-
                 result.success(payload.toMap())
 
             } catch (e: Exception) {
-                // This catch block should never be reached because every
-                // step above has its own error handling. But we include it
-                // as a safety net to guarantee result is always called.
                 Log.e(TAG, "setImageWallpaper: unexpected exception", e)
                 result.success(
                     ResultPayload.error(
@@ -257,9 +210,30 @@ class WallpaperMethodHandler(
     }
 
     // ================================================================
-    // PHASE 3 PLACEHOLDER — Video Wallpaper
+    // PHASE 3 — Video Wallpaper (FULLY IMPLEMENTED)
     // ================================================================
 
+    /**
+     * Handles the setVideoWallpaper method call.
+     *
+     * Flow:
+     * 1. Parse arguments into WallpaperConfig
+     * 2. Check live wallpaper support
+     * 3. Check permissions
+     * 4. Resolve source to local file (download if URL, extract if asset)
+     * 5. Persist config to SharedPreferences (for service to read)
+     * 6. Launch the system live wallpaper chooser intent
+     * 7. Return structured result
+     *
+     * The actual video playback is handled by [VideoWallpaperService]
+     * which runs independently of this handler and the Flutter app.
+     *
+     * Intent strategy:
+     * - Primary: ACTION_CHANGE_LIVE_WALLPAPER with EXTRA_LIVE_WALLPAPER_COMPONENT
+     *   This directly opens our specific wallpaper for confirmation.
+     * - Fallback: ACTION_LIVE_WALLPAPER_CHOOSER
+     *   This opens the general live wallpaper picker (user must find ours).
+     */
     @Suppress("UNCHECKED_CAST")
     private fun handleSetVideoWallpaper(
         call: MethodCall,
@@ -267,57 +241,236 @@ class WallpaperMethodHandler(
     ) {
         scope.launch {
             try {
+                // --- Step 1: Parse arguments ---
+
                 val args = call.arguments as? Map<String, Any?>
-                    ?: return@launch result.success(
+                if (args == null) {
+                    Log.e(TAG, "setVideoWallpaper: null or invalid arguments")
+                    result.success(
                         ResultPayload.error(
-                            "Invalid arguments",
+                            "Invalid arguments passed to setVideoWallpaper",
                             "applyFailed"
                         ).toMap()
                     )
+                    return@launch
+                }
 
                 val config = try {
                     WallpaperConfig.fromMap(args)
                 } catch (e: IllegalArgumentException) {
-                    return@launch result.success(
+                    Log.e(TAG, "setVideoWallpaper: invalid config", e)
+                    result.success(
                         ResultPayload.error(
-                            "Invalid config: ${e.message}",
+                            "Invalid configuration: ${e.message}",
                             "applyFailed"
                         ).toMap()
                     )
+                    return@launch
                 }
 
                 if (!config.isValid()) {
-                    return@launch result.success(
-                        ResultPayload.error(
-                            "Invalid source configuration",
-                            "sourceNotFound"
-                        ).toMap()
+                    Log.e(TAG, "setVideoWallpaper: config validation failed")
+                    val payload = ResultPayload.error(
+                        "Invalid source configuration: "
+                                + "type='${config.sourceType}', "
+                                + "path='${config.sourcePath}'",
+                        "sourceNotFound"
                     )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
                 }
 
-                // TODO: Phase 3 implementation
-                // 1. Resolve source to local file
-                // 2. Save config to SharedPreferences
-                // 3. Launch live wallpaper chooser intent
-                // 4. Return result
+                // --- Step 2: Check live wallpaper support ---
 
-                result.success(
-                    ResultPayload.error(
-                        "Video wallpaper not yet implemented",
+                if (!PermissionHelper.supportsLiveWallpaper(context)) {
+                    Log.w(TAG, "setVideoWallpaper: live wallpaper not supported")
+                    val payload = ResultPayload.error(
+                        "Live wallpapers are not supported on this device. "
+                                + "This may be due to Android Go edition, "
+                                + "manufacturer restrictions, or missing system feature.",
                         "unsupported"
-                    ).toMap()
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                // --- Step 3: Check permissions ---
+
+                if (config.sourceType == "file") {
+                    if (!isAppInternalPath(config.sourcePath) &&
+                        !PermissionHelper.hasStorageReadPermission(context)
+                    ) {
+                        val payload = ResultPayload.error(
+                            "Storage read permission is required to access "
+                                    + "files outside the app directory.",
+                            "permissionDenied"
+                        )
+                        showToastIfNeeded(config.showToast, config.errorMessage)
+                        result.success(payload.toMap())
+                        return@launch
+                    }
+                }
+
+                // --- Step 4: Resolve source to local file ---
+
+                Log.d(TAG, "setVideoWallpaper: resolving source "
+                        + "type=${config.sourceType}, path=${config.sourcePath}")
+
+                val file = try {
+                    sourceResolver.resolve(config.sourceType, config.sourcePath)
+                } catch (e: SourceResolver.SourceNotFoundException) {
+                    Log.e(TAG, "setVideoWallpaper: source not found", e)
+                    val payload = ResultPayload.error(
+                        e.message ?: "Source not found",
+                        "sourceNotFound"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                } catch (e: CacheManager.DownloadException) {
+                    Log.e(TAG, "setVideoWallpaper: download failed", e)
+                    val payload = ResultPayload.error(
+                        e.message ?: "Download failed",
+                        "downloadFailed"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                Log.d(TAG, "setVideoWallpaper: source resolved to "
+                        + "${file.absolutePath} (${file.length()} bytes)")
+
+                // --- Step 5: Persist config to SharedPreferences ---
+                //
+                // The VideoWallpaperService runs in a separate process/lifecycle
+                // and needs to know which video to play, whether to enable
+                // audio, and whether to loop. SharedPreferences is the
+                // simplest IPC mechanism that survives app kill.
+
+                val prefs = context.getSharedPreferences(
+                    VideoWallpaperService.PREFS_NAME,
+                    Context.MODE_PRIVATE
                 )
 
+                val saved = prefs.edit()
+                    .putString(
+                        VideoWallpaperService.KEY_VIDEO_PATH,
+                        file.absolutePath
+                    )
+                    .putBoolean(
+                        VideoWallpaperService.KEY_ENABLE_AUDIO,
+                        config.enableAudio
+                    )
+                    .putBoolean(
+                        VideoWallpaperService.KEY_LOOP,
+                        config.loop
+                    )
+                    .commit() // Use commit() not apply() — we need confirmation
+
+                if (!saved) {
+                    Log.e(TAG, "setVideoWallpaper: failed to save preferences")
+                    val payload = ResultPayload.error(
+                        "Failed to save wallpaper configuration",
+                        "applyFailed"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                Log.d(TAG, "setVideoWallpaper: config saved to SharedPreferences")
+
+                // --- Step 6: Launch live wallpaper chooser ---
+
+                val launchResult = launchLiveWallpaperChooser()
+
+                if (launchResult.success) {
+                    showToastIfNeeded(config.showToast, config.successMessage)
+                    result.success(
+                        ResultPayload.success(config.successMessage).toMap()
+                    )
+                } else {
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(launchResult.toMap())
+                }
+
             } catch (e: Exception) {
-                Log.e(TAG, "setVideoWallpaper failed", e)
+                Log.e(TAG, "setVideoWallpaper: unexpected exception", e)
                 result.success(
                     ResultPayload.error(
-                        "Unexpected error: ${e.message}",
+                        "Unexpected error: ${e.message ?: "Unknown"}",
                         "unknown"
                     ).toMap()
                 )
             }
         }
+    }
+
+    /**
+     * Attempts to launch the system live wallpaper chooser.
+     *
+     * Strategy:
+     * 1. Try ACTION_CHANGE_LIVE_WALLPAPER with our specific component.
+     *    This directly shows our wallpaper for confirmation (best UX).
+     *
+     * 2. If that fails, try ACTION_LIVE_WALLPAPER_CHOOSER.
+     *    This opens the general live wallpaper list (user must find ours).
+     *
+     * 3. If both fail, return an error.
+     *    This can happen on heavily customized OEM launchers.
+     */
+    private fun launchLiveWallpaperChooser(): ResultPayload {
+        // Strategy 1: Direct component intent
+        try {
+            val componentName = ComponentName(
+                context.packageName,
+                VideoWallpaperService::class.java.name
+            )
+
+            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                putExtra(
+                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
+                    componentName
+                )
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            context.startActivity(intent)
+            Log.d(TAG, "Launched direct live wallpaper chooser")
+            return ResultPayload.success("Live wallpaper chooser opened")
+
+        } catch (e: Exception) {
+            Log.w(TAG, "Direct chooser failed, trying fallback", e)
+        }
+
+        // Strategy 2: General live wallpaper picker
+        try {
+            val fallbackIntent = Intent(
+                WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            context.startActivity(fallbackIntent)
+            Log.d(TAG, "Launched fallback live wallpaper chooser")
+            return ResultPayload.success(
+                "Wallpaper picker opened — please select Video Wallpaper"
+            )
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Fallback chooser also failed", e)
+        }
+
+        // Both strategies failed
+        return ResultPayload.error(
+            "Could not open the wallpaper picker. "
+                    + "This device may not support live wallpapers, "
+                    + "or the launcher may block wallpaper changes.",
+            "unsupported"
+        )
     }
 
     // ================================================================
@@ -341,7 +494,7 @@ class WallpaperMethodHandler(
     }
 
     // ================================================================
-    // Cache management — Fully implemented in Phase 1
+    // Cache Management
     // ================================================================
 
     private fun handleClearCache(result: MethodChannel.Result) {
@@ -385,7 +538,6 @@ class WallpaperMethodHandler(
         result: MethodChannel.Result
     ) {
         try {
-            // Handle both Int and Long from Dart
             val maxBytes: Long = when (val raw = call.argument<Any>("maxBytes")) {
                 is Long -> raw
                 is Int -> raw.toLong()
@@ -409,47 +561,24 @@ class WallpaperMethodHandler(
     }
 
     // ================================================================
-    // Helper Methods
+    // Helpers
     // ================================================================
 
-    /**
-     * Shows an Android Toast on the main thread if enabled.
-     *
-     * This is safe to call from any coroutine context because the
-     * scope uses Dispatchers.Main.immediate.
-     */
     private fun showToastIfNeeded(show: Boolean, message: String) {
         if (!show) return
         try {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-            // Toast can fail in rare edge cases (e.g., context destroyed)
             Log.w(TAG, "Failed to show toast: ${e.message}")
         }
     }
 
-    /**
-     * Checks whether a file path is within the app's internal directories.
-     *
-     * Files inside the app's own cache/files/data directories don't require
-     * external storage permissions. This avoids false permission errors
-     * when the user passes a path to a file the app already owns.
-     *
-     * Covered paths:
-     * - context.cacheDir → /data/data/<pkg>/cache/
-     * - context.filesDir → /data/data/<pkg>/files/
-     * - context.getExternalFilesDir() → /storage/emulated/0/Android/data/<pkg>/files/
-     * - context.externalCacheDir → /storage/emulated/0/Android/data/<pkg>/cache/
-     */
     private fun isAppInternalPath(path: String): Boolean {
         val appPaths = mutableListOf<String>()
 
-        // Internal storage
         context.cacheDir?.absolutePath?.let { appPaths.add(it) }
         context.filesDir?.absolutePath?.let { appPaths.add(it) }
         context.dataDir?.absolutePath?.let { appPaths.add(it) }
-
-        // External app-specific storage
         context.getExternalFilesDir(null)?.absolutePath?.let { appPaths.add(it) }
         context.externalCacheDir?.absolutePath?.let { appPaths.add(it) }
 
@@ -460,11 +589,6 @@ class WallpaperMethodHandler(
     // Lifecycle
     // ================================================================
 
-    /**
-     * Cancels all running coroutines and releases resources.
-     *
-     * Called by the plugin's [onDetachedFromEngine].
-     */
     fun dispose() {
         Log.d(TAG, "Disposing method handler")
         scope.cancel("Plugin detached from engine")

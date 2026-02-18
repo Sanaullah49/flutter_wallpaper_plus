@@ -29,7 +29,7 @@ class _HomePageState extends State<HomePage> {
   String _status = 'Ready — tap a button to test';
   bool _isLoading = false;
 
-  // Sample image URLs (high quality, free to use)
+  // Sample URLs — replace with your own for testing
   static const _sampleImageUrl =
       'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
       '?w=1080&q=80';
@@ -37,6 +37,12 @@ class _HomePageState extends State<HomePage> {
   static const _sampleImageUrl2 =
       'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05'
       '?w=1080&q=80';
+
+  // Sample video URL — use a short mp4 for testing
+  // Replace with your own video URL
+  static const _sampleVideoUrl =
+      'https://commondatastorage.googleapis.com/gtv-videos-bucket/'
+      'sample/ForBiggerBlazes.mp4';
 
   void _setStatus(String status) {
     if (mounted) {
@@ -55,7 +61,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   // ================================================================
-  // Image Wallpaper Tests
+  // Image Wallpaper
   // ================================================================
 
   Future<void> _setImageFromUrlBoth() async {
@@ -67,7 +73,6 @@ class _HomePageState extends State<HomePage> {
       target: WallpaperTarget.both,
       successMessage: 'Nature wallpaper applied to both screens!',
       errorMessage: 'Could not set wallpaper',
-      showToast: true,
     );
 
     _setLoading(false);
@@ -86,7 +91,6 @@ class _HomePageState extends State<HomePage> {
       source: WallpaperSource.url(_sampleImageUrl2),
       target: WallpaperTarget.home,
       successMessage: 'Home screen wallpaper updated!',
-      showToast: true,
     );
 
     _setLoading(false);
@@ -105,7 +109,6 @@ class _HomePageState extends State<HomePage> {
       source: WallpaperSource.url(_sampleImageUrl),
       target: WallpaperTarget.lock,
       successMessage: 'Lock screen wallpaper updated!',
-      showToast: true,
     );
 
     _setLoading(false);
@@ -124,7 +127,6 @@ class _HomePageState extends State<HomePage> {
       source: WallpaperSource.asset('assets/sample_wallpaper.jpg'),
       target: WallpaperTarget.both,
       successMessage: 'Asset wallpaper applied!',
-      showToast: true,
     );
 
     _setLoading(false);
@@ -135,32 +137,120 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // ================================================================
+  // Video Wallpaper
+  // ================================================================
+
+  Future<void> _setVideoWallpaperFromUrl() async {
+    _setLoading(true);
+    _setStatus('Downloading video and preparing live wallpaper...');
+
+    final result = await FlutterWallpaperPlus.setVideoWallpaper(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      target: WallpaperTarget.home,
+      enableAudio: false,
+      loop: true,
+      successMessage: 'Video wallpaper ready — please confirm!',
+      errorMessage: 'Could not set video wallpaper',
+    );
+
+    _setLoading(false);
+    _setStatus(
+      result.success
+          ? '✅ ${result.message}'
+          : '❌ ${result.message}\n(${result.errorCode.name})',
+    );
+  }
+
+  Future<void> _setVideoWallpaperWithAudio() async {
+    _setLoading(true);
+    _setStatus('Preparing video wallpaper with audio...');
+
+    final result = await FlutterWallpaperPlus.setVideoWallpaper(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      target: WallpaperTarget.home,
+      enableAudio: true,
+      loop: true,
+      successMessage: 'Video wallpaper with audio ready!',
+    );
+
+    _setLoading(false);
+    _setStatus(
+      result.success
+          ? '✅ ${result.message}'
+          : '❌ ${result.message}\n(${result.errorCode.name})',
+    );
+  }
+
+  Future<void> _setVideoWallpaperNoLoop() async {
+    _setLoading(true);
+    _setStatus('Preparing video wallpaper (no loop)...');
+
+    final result = await FlutterWallpaperPlus.setVideoWallpaper(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      target: WallpaperTarget.home,
+      enableAudio: false,
+      loop: false,
+      successMessage: 'Video wallpaper (single play) ready!',
+    );
+
+    _setLoading(false);
+    _setStatus(
+      result.success
+          ? '✅ ${result.message}'
+          : '❌ ${result.message}\n(${result.errorCode.name})',
+    );
+  }
+
+  Future<void> _setVideoWallpaperFromAsset() async {
+    _setLoading(true);
+    _setStatus('Setting video wallpaper from asset...');
+
+    // Note: You need to add a sample .mp4 to example/assets/ for this to work
+    final result = await FlutterWallpaperPlus.setVideoWallpaper(
+      source: WallpaperSource.asset('assets/sample_video.mp4'),
+      target: WallpaperTarget.home,
+      enableAudio: false,
+      loop: true,
+      successMessage: 'Asset video wallpaper ready!',
+    );
+
+    _setLoading(false);
+    _setStatus(
+      result.success
+          ? '✅ ${result.message}'
+          : '❌ ${result.message}\n(${result.errorCode.name})',
+    );
+  }
+
+  // ================================================================
+  // Error Handling Tests
+  // ================================================================
+
   Future<void> _testInvalidUrl() async {
     _setLoading(true);
-    _setStatus('Testing error handling (invalid URL)...');
+    _setStatus('Testing error handling (bad URL)...');
 
     final result = await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.url(
         'https://invalid.example.com/nonexistent.jpg',
       ),
       target: WallpaperTarget.home,
-      errorMessage: 'This was expected to fail!',
-      showToast: true,
+      showToast: false,
     );
 
     _setLoading(false);
     _setStatus(
-      '${result.success ? "✅" : "⚠️"} ${result.message}\n'
+      '⚠️ ${result.message}\n'
       'Error code: ${result.errorCode.name}\n'
-      '(This error was intentional — testing error handling)',
+      '(This error was intentional)',
     );
   }
 
-  Future<void> _testCachedDownload() async {
+  Future<void> _testCachePerformance() async {
     _setLoading(true);
     _setStatus('First call: downloading...');
 
-    // First call — downloads and caches
     final stopwatch1 = Stopwatch()..start();
     final result1 = await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.url(_sampleImageUrl),
@@ -175,12 +265,8 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    _setStatus(
-      'First call: ${stopwatch1.elapsedMilliseconds}ms\n'
-      'Second call: using cache...',
-    );
+    _setStatus('Second call: using cache...');
 
-    // Second call — should use cache (much faster)
     final stopwatch2 = Stopwatch()..start();
     await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.url(_sampleImageUrl),
@@ -190,11 +276,16 @@ class _HomePageState extends State<HomePage> {
     stopwatch2.stop();
 
     _setLoading(false);
+
+    final speedup = stopwatch2.elapsedMilliseconds == 0
+        ? 'instant'
+        : '${(stopwatch1.elapsedMilliseconds / stopwatch2.elapsedMilliseconds).toStringAsFixed(1)}x';
+
     _setStatus(
       '✅ Cache performance test\n'
       'First call (download): ${stopwatch1.elapsedMilliseconds}ms\n'
       'Second call (cached): ${stopwatch2.elapsedMilliseconds}ms\n'
-      'Speedup: ${(stopwatch1.elapsedMilliseconds / (stopwatch2.elapsedMilliseconds == 0 ? 1 : stopwatch2.elapsedMilliseconds)).toStringAsFixed(1)}x faster',
+      'Speedup: $speedup faster',
     );
   }
 
@@ -226,7 +317,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Wallpaper Plus — Phase 2'),
+        title: const Text('Wallpaper Plus — Phase 3'),
         actions: [
           IconButton(
             icon: const Icon(Icons.storage),
@@ -268,16 +359,14 @@ class _HomePageState extends State<HomePage> {
 
             const SizedBox(height: 24),
 
-            // --- Image Wallpaper from URL ---
-            _buildSectionHeader(context, 'Image Wallpaper — URL'),
-
+            // --- Image Wallpaper ---
+            _sectionHeader(context, 'Image Wallpaper — URL'),
             const SizedBox(height: 8),
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _setImageFromUrlBoth,
               icon: const Icon(Icons.wallpaper),
-              label: const Text('Set URL → Both Screens'),
+              label: const Text('URL → Both Screens'),
             ),
-
             const SizedBox(height: 8),
             Row(
               children: [
@@ -285,7 +374,7 @@ class _HomePageState extends State<HomePage> {
                   child: ElevatedButton.icon(
                     onPressed: _isLoading ? null : _setImageFromUrlHome,
                     icon: const Icon(Icons.home),
-                    label: const Text('Home Only'),
+                    label: const Text('Home'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -293,96 +382,62 @@ class _HomePageState extends State<HomePage> {
                   child: ElevatedButton.icon(
                     onPressed: _isLoading ? null : _setImageFromUrlLock,
                     icon: const Icon(Icons.lock),
-                    label: const Text('Lock Only'),
+                    label: const Text('Lock'),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 24),
-
-            // --- Image Wallpaper from Asset ---
-            _buildSectionHeader(context, 'Image Wallpaper — Asset'),
-
             const SizedBox(height: 8),
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _setImageFromAsset,
               icon: const Icon(Icons.folder),
-              label: const Text('Set Asset → Both Screens'),
+              label: const Text('Asset → Both Screens'),
             ),
 
             const SizedBox(height: 24),
 
-            // --- Performance & Error Tests ---
-            _buildSectionHeader(context, 'Tests'),
-
+            // --- Video Wallpaper ---
+            _sectionHeader(context, 'Video (Live) Wallpaper'),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _setVideoWallpaperFromUrl,
+              icon: const Icon(Icons.videocam),
+              label: const Text('Video URL — No Audio, Loop'),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _setVideoWallpaperWithAudio,
+              icon: const Icon(Icons.volume_up),
+              label: const Text('Video URL — With Audio, Loop'),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _setVideoWallpaperNoLoop,
+              icon: const Icon(Icons.replay),
+              label: const Text('Video URL — No Audio, No Loop'),
+            ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: _isLoading ? null : _testCachedDownload,
+              onPressed: _isLoading ? null : _setVideoWallpaperFromAsset,
+              icon: const Icon(Icons.folder_special),
+              label: const Text('Video Asset (needs sample_video.mp4)'),
+            ),
+
+            const SizedBox(height: 24),
+
+            // --- Tests ---
+            _sectionHeader(context, 'Tests'),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _testCachePerformance,
               icon: const Icon(Icons.speed),
               label: const Text('Cache Performance Test'),
             ),
-
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _isLoading ? null : _testInvalidUrl,
               icon: const Icon(Icons.error_outline),
               label: const Text('Test Error Handling (Bad URL)'),
-            ),
-
-            const SizedBox(height: 24),
-
-            // --- Dart API Validation ---
-            _buildSectionHeader(context, 'Dart API Validation'),
-
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () {
-                try {
-                  final assetSource = WallpaperSource.asset('assets/test.jpg');
-                  final fileSource = WallpaperSource.file('/storage/test.jpg');
-                  final urlSource = WallpaperSource.url(
-                    'https://example.com/bg.jpg',
-                  );
-
-                  final map = urlSource.toMap();
-
-                  final urlSource2 = WallpaperSource.url(
-                    'https://example.com/bg.jpg',
-                  );
-                  final isEqual = urlSource == urlSource2;
-
-                  _setStatus(
-                    '✅ All Dart API validations passed!\n'
-                    'Asset: ${assetSource.type.name}\n'
-                    'File: ${fileSource.type.name}\n'
-                    'URL: ${urlSource.type.name}\n'
-                    'Serialization: ${map.keys.join(", ")}\n'
-                    'Equality: $isEqual',
-                  );
-                } catch (e) {
-                  _setStatus('❌ Validation failed: $e');
-                }
-              },
-              icon: const Icon(Icons.check_circle),
-              label: const Text('Validate Dart API'),
-            ),
-
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () {
-                try {
-                  WallpaperSource.url('not-a-valid-url');
-                  _setStatus('❌ Should have thrown ArgumentError!');
-                } on ArgumentError catch (e) {
-                  _setStatus(
-                    '✅ Input validation works!\n'
-                    'Caught: ${e.message}',
-                  );
-                }
-              },
-              icon: const Icon(Icons.security),
-              label: const Text('Test Input Validation'),
             ),
 
             const SizedBox(height: 32),
@@ -392,7 +447,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title) {
+  Widget _sectionHeader(BuildContext context, String title) {
     return Row(
       children: [
         Text(
