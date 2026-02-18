@@ -6,6 +6,7 @@ import 'wallpaper_error_code.dart';
 import 'wallpaper_result.dart';
 import 'wallpaper_source.dart';
 import 'wallpaper_target.dart';
+import 'target_support_policy.dart';
 
 /// Internal implementation layer that communicates with the Android platform.
 ///
@@ -168,6 +169,20 @@ class FlutterWallpaperPlusImpl {
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Returns target support policy for the current Android device/ROM.
+  static Future<TargetSupportPolicy> getTargetSupportPolicy() async {
+    try {
+      final result = await _channel.invokeMethod<Map>('getTargetSupportPolicy');
+      return TargetSupportPolicy.fromMap(result);
+    } on PlatformException {
+      return TargetSupportPolicy.unknown;
+    } on MissingPluginException {
+      return TargetSupportPolicy.unknown;
+    } catch (_) {
+      return TargetSupportPolicy.unknown;
     }
   }
 

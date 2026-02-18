@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Android example app no longer goes black/white after wallpaper apply on OEMs that recreate the activity (e.g., MIUI): `MainActivity` now reuses a cached `FlutterEngine` across host activity recreation.
+- Android live wallpaper target handling now validates unsupported `lock`-only requests and improves `home` behavior by creating a dedicated lock wallpaper snapshot before launching the system picker (best effort, OEM-dependent).
+- Android image wallpaper `both` target now applies OEM fallback (combined flags, then explicit home+lock writes on known restrictive OEMs) and reports `manufacturerRestriction` when lock updates are blocked.
+- Android live wallpaper home-target lock snapshot now uses permission-independent bitmap fallback when direct wallpaper file read is restricted by OEM permission policy.
+- Android now fail-fast returns `manufacturerRestriction` for lock/both targets on known restrictive OEMs (Xiaomi/Redmi/Oppo/Vivo/Realme) to avoid misleading success.
 
 ### Added
 
@@ -68,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `FlutterWallpaperPlus.setImageWallpaper()`
 - `FlutterWallpaperPlus.setVideoWallpaper()`
 - `FlutterWallpaperPlus.getVideoThumbnail()`
+- `FlutterWallpaperPlus.getTargetSupportPolicy()`
 - `FlutterWallpaperPlus.clearCache()`
 - `FlutterWallpaperPlus.getCacheSize()`
 - `FlutterWallpaperPlus.setMaxCacheSize()`

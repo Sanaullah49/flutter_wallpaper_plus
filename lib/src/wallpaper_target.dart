@@ -18,10 +18,14 @@ enum WallpaperTarget {
   /// Maps to [WallpaperManager.FLAG_LOCK].
   ///
   /// Not all devices support this independently.
+  /// For live video wallpapers, lock-only is unsupported on Android
+  /// public APIs.
+  /// Some OEMs may also block image lock target for third-party apps.
   lock,
 
   /// Apply wallpaper to both home and lock screens.
   ///
   /// Maps to [WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK].
+  /// On restrictive OEM ROMs, this target may be disabled at runtime.
   both,
 }

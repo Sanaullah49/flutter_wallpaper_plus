@@ -96,28 +96,25 @@ class ImageWallpaperManager(private val context: Context) {
             }
 
             // --- Determine wallpaper flags ---
-
-            val flags = resolveFlags(config.target)
-
-            Log.d(TAG, "Setting wallpaper: file=${imageFile.name}, "
-                    + "size=${imageFile.length()}, "
-                    + "target=${config.target}, "
-                    + "flags=$flags")
+            Log.d(
+                TAG,
+                "Setting wallpaper: file=${imageFile.name}, "
+                        + "size=${imageFile.length()}, "
+                        + "target=${config.target}"
+            )
 
             // --- Apply wallpaper ---
+            val applyResult = when (config.target) {
+                "both" -> setBothWithFallback(wallpaperManager, imageFile)
+                else -> {
+                    val flags = resolveFlags(config.target)
+                    setWallpaperForFlags(wallpaperManager, imageFile, flags)
+                    null
+                }
+            }
 
-            FileInputStream(imageFile).use { stream ->
-                // setStream(InputStream, visibleCropHint, allowBackup, which)
-                //
-                // visibleCropHint = null → system handles cropping
-                // allowBackup = true → wallpaper is included in device backups
-                // which = flags → specifies home/lock/both
-                wallpaperManager.setStream(
-                    stream,     // image data
-                    null,       // visibleCropHint — let system crop
-                    true,       // allowBackup
-                    flags       // FLAG_SYSTEM, FLAG_LOCK, or both
-                )
+            if (applyResult != null) {
+                return@withContext applyResult
             }
 
             Log.d(TAG, "Wallpaper set successfully")
@@ -155,6 +152,131 @@ class ImageWallpaperManager(private val context: Context) {
                 "applyFailed"
             )
         }
+    }
+
+    private fun setBothWithFallback(
+        wallpaperManager: WallpaperManager,
+        imageFile: File
+    ): ResultPayload? {
+        val beforeSystemId = safeGetWallpaperId(
+            wallpaperManager,
+            WallpaperManager.FLAG_SYSTEM
+        )
+        val beforeLockId = safeGetWallpaperId(
+            wallpaperManager,
+            WallpaperManager.FLAG_LOCK
+        )
+        val hadDedicatedLock = beforeSystemId > 0 &&
+                beforeLockId > 0 &&
+                beforeSystemId != beforeLockId
+        val manufacturer = OemPolicy.manufacturerNormalized()
+        val needsOemFallbackChecks = OemPolicy.isRestrictiveOem()
+
+        Log.d(
+            TAG,
+            "Applying both wallpapers (combined flags first). "
+                    + "beforeSystemId=$beforeSystemId, "
+                    + "beforeLockId=$beforeLockId, "
+                    + "hadDedicatedLock=$hadDedicatedLock, "
+                    + "manufacturer=$manufacturer"
+        )
+
+        // Strategy 1: Standard Android path.
+        setWallpaperForFlags(
+            wallpaperManager,
+            imageFile,
+            WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
+        )
+
+        if (!needsOemFallbackChecks) {
+            // Non-targeted OEMs stay on the standard path.
+            return null
+        }
+
+        // Strategy 2: Known OEMs may ignore combined flags for lock updates.
+        // Force explicit system + lock writes even if combined looked successful.
+        Log.w(
+            TAG,
+            "Running OEM fallback: explicit system+lock writes"
+        )
+        setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_SYSTEM)
+        setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_LOCK)
+
+        if (!hadDedicatedLock) {
+            // Lock was shared (or IDs unavailable); no reliable verification possible.
+            return null
+        }
+
+        val lockChangedAfterFallback = didWallpaperIdChange(
+            wallpaperManager,
+            WallpaperManager.FLAG_LOCK,
+            beforeLockId
+        )
+        if (lockChangedAfterFallback) {
+            return null
+        }
+
+        val systemChangedAfterFallback = didWallpaperIdChange(
+            wallpaperManager,
+            WallpaperManager.FLAG_SYSTEM,
+            beforeSystemId
+        )
+
+        return if (!systemChangedAfterFallback) {
+            // Likely the exact same wallpaper was already applied.
+            null
+        } else {
+            ResultPayload.error(
+                "Home wallpaper was updated but lock wallpaper was not. "
+                        + "This device appears to block lock wallpaper updates.",
+                "manufacturerRestriction"
+            )
+        }
+    }
+
+    private fun setWallpaperForFlags(
+        wallpaperManager: WallpaperManager,
+        imageFile: File,
+        flags: Int
+    ) {
+        FileInputStream(imageFile).use { stream ->
+            // setStream(InputStream, visibleCropHint, allowBackup, which)
+            //
+            // visibleCropHint = null → system handles cropping
+            // allowBackup = true → wallpaper is included in device backups
+            // which = flags → specifies home/lock/both
+            wallpaperManager.setStream(
+                stream,
+                null,
+                true,
+                flags
+            )
+        }
+    }
+
+    private fun safeGetWallpaperId(
+        wallpaperManager: WallpaperManager,
+        which: Int
+    ): Int {
+        return try {
+            wallpaperManager.getWallpaperId(which)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read wallpaper id for which=$which", e)
+            -1
+        }
+    }
+
+    private fun didWallpaperIdChange(
+        wallpaperManager: WallpaperManager,
+        which: Int,
+        beforeId: Int
+    ): Boolean {
+        if (beforeId <= 0) {
+            // Cannot verify reliably; assume success.
+            return true
+        }
+        val afterId = safeGetWallpaperId(wallpaperManager, which)
+        return afterId > 0 && afterId != beforeId
     }
 
     /**

@@ -42,11 +42,13 @@ class _HomePageState extends State<HomePage> {
   String _status = 'Ready';
   bool _isLoading = false;
   Uint8List? _thumbnailBytes;
+  TargetSupportPolicy _policy = TargetSupportPolicy.unknown;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
+    _loadTargetPolicy();
     debugPrint('[ExampleDart] HomePage initState');
   }
 
@@ -58,6 +60,18 @@ class _HomePageState extends State<HomePage> {
   }
 
   final _lifecycleObserver = _ExampleLifecycleObserver();
+
+  Future<void> _loadTargetPolicy() async {
+    final policy = await FlutterWallpaperPlus.getTargetSupportPolicy();
+    if (!mounted) return;
+    setState(() => _policy = policy);
+    if (policy.restrictiveOem) {
+      _updateStatus(
+        '⚠️ ${policy.manufacturer} policy detected: lock/both targets '
+        'are disabled for reliability.',
+      );
+    }
+  }
 
   // ================================================================
   // Sample URLs — replace with your own for testing
@@ -162,6 +176,19 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   });
+
+  Future<void> _videoSilentLoopBoth() =>
+      _run('Video (silent, loop, both)', () async {
+        _showResult(
+          await FlutterWallpaperPlus.setVideoWallpaper(
+            source: WallpaperSource.url(_videoUrl),
+            target: WallpaperTarget.both,
+            enableAudio: false,
+            loop: true,
+            successMessage: 'Video wallpaper ready — confirm in picker!',
+          ),
+        );
+      });
 
   Future<void> _videoAudioLoop() => _run('Video (audio, loop)', () async {
     _showResult(
@@ -383,25 +410,77 @@ class _HomePageState extends State<HomePage> {
 
           // Image Wallpaper
           _header('Image Wallpaper'),
+          if (_policy.restrictiveOem) ...[
+            const SizedBox(height: 8),
+            Card(
+              color: theme.colorScheme.errorContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'Lock and both targets are disabled on this OEM '
+                  '(${_policy.manufacturer}) to avoid false success states.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
-          _btn(Icons.wallpaper, 'URL → Both Screens', _imageUrlBoth),
+          _btn(
+            Icons.wallpaper,
+            _policy.allowImageBoth
+                ? 'URL → Both Screens'
+                : 'URL → Both (Disabled)',
+            _policy.allowImageBoth ? _imageUrlBoth : null,
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(child: _btn(Icons.home_outlined, 'Home', _imageUrlHome)),
               const SizedBox(width: 8),
-              Expanded(child: _btn(Icons.lock_outline, 'Lock', _imageUrlLock)),
+              Expanded(
+                child: _btn(
+                  Icons.lock_outline,
+                  _policy.allowImageLock ? 'Lock' : 'Lock (Disabled)',
+                  _policy.allowImageLock ? _imageUrlLock : null,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
-          _btn(Icons.folder_outlined, 'Asset → Both', _imageAsset),
+          _btn(
+            Icons.folder_outlined,
+            _policy.allowImageBoth ? 'Asset → Both' : 'Asset → Both (Disabled)',
+            _policy.allowImageBoth ? _imageAsset : null,
+          ),
 
           const SizedBox(height: 20),
 
           // Video Wallpaper
           _header('Video (Live) Wallpaper'),
           const SizedBox(height: 8),
-          _btn(Icons.videocam_outlined, 'Silent + Loop', _videoSilentLoop),
+          Row(
+            children: [
+              Expanded(
+                child: _btn(
+                  Icons.home_outlined,
+                  'Silent + Loop (Home)',
+                  _videoSilentLoop,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _btn(
+                  Icons.smartphone_outlined,
+                  _policy.allowVideoBoth
+                      ? 'Silent + Loop (Both)'
+                      : 'Silent + Loop (Both Disabled)',
+                  _policy.allowVideoBoth ? _videoSilentLoopBoth : null,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 8),
           Row(
             children: [

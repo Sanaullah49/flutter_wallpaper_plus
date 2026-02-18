@@ -4,6 +4,13 @@ import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
@@ -58,6 +65,7 @@ class WallpaperMethodHandler(
         when (call.method) {
             "setImageWallpaper" -> handleSetImageWallpaper(call, result)
             "setVideoWallpaper" -> handleSetVideoWallpaper(call, result)
+            "getTargetSupportPolicy" -> handleGetTargetSupportPolicy(result)
             "getVideoThumbnail" -> handleGetVideoThumbnail(call, result)
             "clearCache" -> handleClearCache(result)
             "getCacheSize" -> handleGetCacheSize(result)
@@ -116,6 +124,20 @@ class WallpaperMethodHandler(
                         "sourceNotFound"
                     )
                     showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                if (OemPolicy.isRestrictiveOem() &&
+                    (config.target == "lock" || config.target == "both")
+                ) {
+                    outcome = "restricted_target"
+                    val payload = ResultPayload.error(
+                        "This OEM does not reliably allow third-party lock-screen "
+                                + "wallpaper changes. Use home target.",
+                        "manufacturerRestriction"
+                    )
+                    showToastIfNeeded(config.showToast, payload.message)
                     result.success(payload.toMap())
                     return@launch
                 }
@@ -259,6 +281,39 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
+                if (config.target == "lock") {
+                    outcome = "unsupported_target"
+                    val payload = ResultPayload.error(
+                        "Android does not support setting live wallpaper "
+                                + "on lock screen only. Use home or both.",
+                        "unsupported"
+                    )
+                    showToastIfNeeded(config.showToast, payload.message)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                if (OemPolicy.isRestrictiveOem() && config.target == "both") {
+                    outcome = "restricted_target"
+                    val payload = ResultPayload.error(
+                        "This OEM controls live wallpaper lock-screen behavior. "
+                                + "Use home target for reliable results.",
+                        "manufacturerRestriction"
+                    )
+                    showToastIfNeeded(config.showToast, payload.message)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                val effectiveTarget = if (config.target == "both") "home" else config.target
+
+                Log.d(
+                    TAG,
+                    "setVideoWallpaper request: requestedTarget=${config.target}, "
+                            + "effectiveTarget=$effectiveTarget, "
+                            + "manufacturer=${Build.MANUFACTURER}, model=${Build.MODEL}"
+                )
+
                 if (!PermissionHelper.supportsLiveWallpaper(context)) {
                     outcome = "unsupported"
                     val payload = ResultPayload.error(
@@ -334,6 +389,13 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
+                if (effectiveTarget == "home") {
+                    // Home-only live wallpaper can still affect lock screen when
+                    // lock wallpaper is not set separately. Create a dedicated
+                    // lock snapshot first so home-only applies predictably.
+                    prepareLockWallpaperForHomeTargetIfNeeded()
+                }
+
                 val launchResult = launchLiveWallpaperChooser()
 
                 if (launchResult.success) {
@@ -407,6 +469,136 @@ class WallpaperMethodHandler(
                     + "This device may not support live wallpapers.",
             "unsupported"
         )
+    }
+
+    private fun handleGetTargetSupportPolicy(result: MethodChannel.Result) {
+        val restrictive = OemPolicy.isRestrictiveOem()
+        result.success(
+            hashMapOf<String, Any>(
+                "manufacturer" to OemPolicy.manufacturerRaw(),
+                "model" to OemPolicy.modelRaw(),
+                "restrictiveOem" to restrictive,
+                "allowImageHome" to true,
+                "allowImageLock" to !restrictive,
+                "allowImageBoth" to !restrictive,
+                "allowVideoHome" to true,
+                "allowVideoLock" to false,
+                "allowVideoBoth" to !restrictive,
+            )
+        )
+    }
+
+    private suspend fun prepareLockWallpaperForHomeTargetIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+
+        withContext(Dispatchers.IO) {
+            try {
+                val wallpaperManager = WallpaperManager.getInstance(context)
+                if (!wallpaperManager.isWallpaperSupported ||
+                    !wallpaperManager.isSetWallpaperAllowed
+                ) {
+                    Log.d(
+                        TAG,
+                        "Skipping lock wallpaper prep: wallpaper changes not allowed"
+                    )
+                    return@withContext
+                }
+
+                val lockId = wallpaperManager.getWallpaperId(WallpaperManager.FLAG_LOCK)
+                val systemId = wallpaperManager.getWallpaperId(WallpaperManager.FLAG_SYSTEM)
+                val lockAlreadyDedicated = lockId > 0 && lockId != systemId
+
+                if (lockAlreadyDedicated) {
+                    Log.d(TAG, "Lock wallpaper already dedicated; no prep needed")
+                    return@withContext
+                }
+
+                val snapshot = readWallpaperSnapshotBitmap(wallpaperManager)
+                if (snapshot == null) {
+                    Log.w(
+                        TAG,
+                        "Could not snapshot lock/system wallpaper before home-only live apply"
+                    )
+                    return@withContext
+                }
+
+                wallpaperManager.setBitmap(
+                    snapshot,
+                    null,
+                    true,
+                    WallpaperManager.FLAG_LOCK
+                )
+                snapshot.recycle()
+
+                Log.d(
+                    TAG,
+                    "Prepared dedicated lock wallpaper for home-only live wallpaper apply"
+                )
+            } catch (e: SecurityException) {
+                Log.w(
+                    TAG,
+                    "Permission denied while preparing lock wallpaper snapshot",
+                    e
+                )
+            } catch (e: Exception) {
+                Log.w(
+                    TAG,
+                    "Failed to prepare lock wallpaper snapshot for home target",
+                    e
+                )
+            }
+        }
+    }
+
+    private fun readWallpaperSnapshotBitmap(
+        wallpaperManager: WallpaperManager
+    ): Bitmap? {
+        val lockOrSystemFd = try {
+            wallpaperManager.getWallpaperFile(WallpaperManager.FLAG_LOCK)
+                ?: wallpaperManager.getWallpaperFile(WallpaperManager.FLAG_SYSTEM)
+        } catch (e: SecurityException) {
+            Log.i(
+                TAG,
+                "Wallpaper file access denied; falling back to drawable snapshot"
+            )
+            null
+        } catch (e: Exception) {
+            Log.w(TAG, "Wallpaper file read failed; falling back to drawable snapshot", e)
+            null
+        }
+
+        if (lockOrSystemFd != null) {
+            ParcelFileDescriptor.AutoCloseInputStream(lockOrSystemFd).use { input ->
+                val fromFile = BitmapFactory.decodeStream(input)
+                if (fromFile != null) {
+                    return fromFile
+                }
+            }
+        }
+
+        return try {
+            drawableToBitmap(wallpaperManager.drawable)
+        } catch (e: Exception) {
+            Log.w(TAG, "Drawable snapshot fallback failed", e)
+            null
+        }
+    }
+
+    private fun drawableToBitmap(drawable: Drawable?): Bitmap {
+        if (drawable == null) {
+            throw IllegalStateException("Wallpaper drawable is null")
+        }
+        if (drawable is BitmapDrawable && drawable.bitmap != null) {
+            return drawable.bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        }
+
+        val width = if (drawable.intrinsicWidth > 0) drawable.intrinsicWidth else 1
+        val height = if (drawable.intrinsicHeight > 0) drawable.intrinsicHeight else 1
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return bitmap
     }
 
     // ================================================================

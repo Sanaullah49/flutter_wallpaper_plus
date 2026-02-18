@@ -50,6 +50,7 @@ library;
 import 'dart:typed_data';
 
 import 'src/flutter_wallpaper_plus_impl.dart';
+import 'src/target_support_policy.dart';
 import 'src/wallpaper_result.dart';
 import 'src/wallpaper_source.dart';
 import 'src/wallpaper_target.dart';
@@ -58,6 +59,7 @@ import 'src/wallpaper_target.dart';
 export 'src/wallpaper_error_code.dart';
 export 'src/wallpaper_result.dart';
 export 'src/wallpaper_source.dart';
+export 'src/target_support_policy.dart';
 export 'src/wallpaper_target.dart';
 
 /// Primary API for setting wallpapers on Android.
@@ -84,6 +86,8 @@ class FlutterWallpaperPlus {
   ///
   /// - [target] — Which screen(s) to apply the wallpaper to.
   ///   On pre-API 24 devices, this is ignored and both screens are set.
+  ///   On some OEM ROMs, lock/both can be blocked and return
+  ///   `WallpaperErrorCode.manufacturerRestriction`.
   ///
   /// - [successMessage] — Custom message shown in the Android Toast
   ///   and returned in [WallpaperResult.message] on success.
@@ -145,8 +149,11 @@ class FlutterWallpaperPlus {
   ///
   /// - [source] — Where the video comes from (asset, file, or URL).
   ///
-  /// - [target] — Which screen to apply to. Note that live wallpaper
-  ///   target support depends on the device; some only support home screen.
+  /// - [target] — Which screen to apply to.
+  ///   `WallpaperTarget.lock` is not supported for live wallpapers on
+  ///   Android public APIs and returns `WallpaperErrorCode.unsupported`.
+  ///   `WallpaperTarget.home` and `WallpaperTarget.both` are best-effort
+  ///   requests and still use the system picker, which decides final behavior.
   ///
   /// - [enableAudio] — Whether to play the video's audio track.
   ///   Default: `false` (silent).
@@ -231,6 +238,13 @@ class FlutterWallpaperPlus {
       quality: quality,
       cache: cache,
     );
+  }
+
+  /// Returns device policy for wallpaper target reliability/support.
+  ///
+  /// Use this to disable unsupported or unreliable target options in UI.
+  static Future<TargetSupportPolicy> getTargetSupportPolicy() {
+    return FlutterWallpaperPlusImpl.getTargetSupportPolicy();
   }
 
   /// Clears all cached media files and thumbnails.

@@ -41,6 +41,18 @@ void main() {
               return 1048576;
             case 'setMaxCacheSize':
               return null;
+            case 'getTargetSupportPolicy':
+              return <String, dynamic>{
+                'manufacturer': 'Xiaomi',
+                'model': '23106RN0DA',
+                'restrictiveOem': true,
+                'allowImageHome': true,
+                'allowImageLock': false,
+                'allowImageBoth': false,
+                'allowVideoHome': true,
+                'allowVideoLock': false,
+                'allowVideoBoth': false,
+              };
             default:
               return null;
           }
@@ -50,6 +62,28 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
+  });
+
+  // ================================================================
+  // Target Support Policy
+  // ================================================================
+
+  group('TargetSupportPolicy', () {
+    test('returns parsed policy', () async {
+      final policy = await FlutterWallpaperPlus.getTargetSupportPolicy();
+      expect(policy.manufacturer, 'Xiaomi');
+      expect(policy.restrictiveOem, isTrue);
+      expect(policy.allowImageBoth, isFalse);
+      expect(policy.allowVideoBoth, isFalse);
+    });
+
+    test('returns unknown on null response', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async => null);
+      final policy = await FlutterWallpaperPlus.getTargetSupportPolicy();
+      expect(policy.manufacturer, 'unknown');
+      expect(policy.allowImageHome, isTrue);
+    });
   });
 
   // ================================================================
