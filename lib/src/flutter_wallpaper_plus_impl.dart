@@ -40,6 +40,7 @@ class FlutterWallpaperPlusImpl {
     String? successMessage,
     String? errorMessage,
     bool showToast = true,
+    bool goToHome = false,
   }) async {
     try {
       final result = await _channel
@@ -49,6 +50,7 @@ class FlutterWallpaperPlusImpl {
             'successMessage': successMessage ?? 'Wallpaper set successfully',
             'errorMessage': errorMessage ?? 'Failed to set wallpaper',
             'showToast': showToast,
+            'goToHome': goToHome,
           });
 
       if (result != null) {
@@ -96,6 +98,7 @@ class FlutterWallpaperPlusImpl {
     String? successMessage,
     String? errorMessage,
     bool showToast = true,
+    bool goToHome = false,
   }) async {
     try {
       final result = await _channel.invokeMethod<Map>(
@@ -108,6 +111,7 @@ class FlutterWallpaperPlusImpl {
           'successMessage': successMessage ?? 'Live wallpaper set successfully',
           'errorMessage': errorMessage ?? 'Failed to set live wallpaper',
           'showToast': showToast,
+          'goToHome': goToHome,
         },
       );
 
@@ -152,16 +156,16 @@ class FlutterWallpaperPlusImpl {
     required WallpaperSource source,
     int quality = 30,
     bool cache = true,
+    bool goToHome = false,
   }) async {
     try {
-      final result = await _channel.invokeMethod<Uint8List>(
-        'getVideoThumbnail',
-        <String, dynamic>{
-          'source': source.toMap(),
-          'quality': quality.clamp(1, 100),
-          'cache': cache,
-        },
-      );
+      final result = await _channel
+          .invokeMethod<Uint8List>('getVideoThumbnail', <String, dynamic>{
+            'source': source.toMap(),
+            'quality': quality.clamp(1, 100),
+            'cache': cache,
+            'goToHome': goToHome,
+          });
       return result;
     } on PlatformException {
       return null;
@@ -173,9 +177,14 @@ class FlutterWallpaperPlusImpl {
   }
 
   /// Returns target support policy for the current Android device/ROM.
-  static Future<TargetSupportPolicy> getTargetSupportPolicy() async {
+  static Future<TargetSupportPolicy> getTargetSupportPolicy({
+    bool goToHome = false,
+  }) async {
     try {
-      final result = await _channel.invokeMethod<Map>('getTargetSupportPolicy');
+      final result = await _channel.invokeMethod<Map>(
+        'getTargetSupportPolicy',
+        <String, dynamic>{'goToHome': goToHome},
+      );
       return TargetSupportPolicy.fromMap(result);
     } on PlatformException {
       return TargetSupportPolicy.unknown;
@@ -186,10 +195,61 @@ class FlutterWallpaperPlusImpl {
     }
   }
 
-  /// Clears all cached media files and thumbnails.
-  static Future<WallpaperResult> clearCache() async {
+  /// Opens Android's native wallpaper chooser/settings screen.
+  static Future<WallpaperResult> openNativeWallpaperChooser({
+    required WallpaperSource source,
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+    bool goToHome = false,
+  }) async {
     try {
-      final result = await _channel.invokeMethod<Map>('clearCache');
+      final result = await _channel
+          .invokeMethod<Map>('openNativeWallpaperChooser', <String, dynamic>{
+            'source': source.toMap(),
+            'successMessage': successMessage ?? 'Wallpaper chooser opened',
+            'errorMessage': errorMessage ?? 'Failed to open wallpaper chooser',
+            'showToast': showToast,
+            'goToHome': goToHome,
+          });
+
+      if (result != null) {
+        return WallpaperResult.fromMap(result);
+      }
+
+      return WallpaperResult(
+        success: false,
+        message: errorMessage ?? 'No response from platform layer',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    } on PlatformException catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: e.message ?? errorMessage ?? 'Platform error occurred',
+        errorCode: WallpaperErrorCodeParsing.fromString(e.code),
+      );
+    } on MissingPluginException {
+      return const WallpaperResult(
+        success: false,
+        message: 'Plugin not available. Are you running on Android?',
+        errorCode: WallpaperErrorCode.unsupported,
+      );
+    } catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: 'Unexpected error: ${e.toString()}',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    }
+  }
+
+  /// Clears all cached media files and thumbnails.
+  static Future<WallpaperResult> clearCache({bool goToHome = false}) async {
+    try {
+      final result = await _channel.invokeMethod<Map>(
+        'clearCache',
+        <String, dynamic>{'goToHome': goToHome},
+      );
 
       if (result != null) {
         return WallpaperResult.fromMap(result);
@@ -214,9 +274,12 @@ class FlutterWallpaperPlusImpl {
   /// Returns total size of all cached files in bytes.
   ///
   /// Returns 0 if cache is empty or if an error occurs.
-  static Future<int> getCacheSize() async {
+  static Future<int> getCacheSize({bool goToHome = false}) async {
     try {
-      final result = await _channel.invokeMethod<int>('getCacheSize');
+      final result = await _channel.invokeMethod<int>(
+        'getCacheSize',
+        <String, dynamic>{'goToHome': goToHome},
+      );
       return result ?? 0;
     } catch (_) {
       return 0;
@@ -229,7 +292,10 @@ class FlutterWallpaperPlusImpl {
   /// automatically evicted during the next cache write.
   ///
   /// Default is 200 MB.
-  static Future<void> setMaxCacheSize(int maxBytes) async {
+  static Future<void> setMaxCacheSize(
+    int maxBytes, {
+    bool goToHome = false,
+  }) async {
     if (maxBytes <= 0) {
       throw ArgumentError.value(
         maxBytes,
@@ -241,6 +307,7 @@ class FlutterWallpaperPlusImpl {
     try {
       await _channel.invokeMethod<void>('setMaxCacheSize', <String, dynamic>{
         'maxBytes': maxBytes,
+        'goToHome': goToHome,
       });
     } catch (_) {
       // Cache configuration is non-critical — fail silently.

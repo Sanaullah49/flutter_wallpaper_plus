@@ -45,6 +45,16 @@
         android:required="false" />
 
     <application>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.flutterwallpaperplus.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/wallpaper_plus_file_paths" />
+        </provider>
+
         <!--
             Video wallpaper service — Phase 3 will implement the class.
             Declared here in Phase 1 so the manifest is complete.

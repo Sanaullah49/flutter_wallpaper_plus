@@ -26,6 +26,8 @@ data class WallpaperConfig(
     val errorMessage: String = "Failed to set wallpaper",
     /** Whether to show Android Toast notifications */
     val showToast: Boolean = true,
+    /** Whether to send user to home screen as best-effort after launch/apply */
+    val goToHome: Boolean = false,
 ) {
     companion object {
         /**
@@ -65,6 +67,7 @@ data class WallpaperConfig(
                 errorMessage = map["errorMessage"] as? String
                     ?: "Failed to set wallpaper",
                 showToast = map["showToast"] as? Boolean ?: true,
+                goToHome = map["goToHome"] as? Boolean ?: false,
             )
         }
     }

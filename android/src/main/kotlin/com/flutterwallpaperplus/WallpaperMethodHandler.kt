@@ -1,25 +1,32 @@
 package com.flutterwallpaperplus
 
 import android.app.WallpaperManager
+import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.util.Log
+import android.webkit.MimeTypeMap
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import com.flutterwallpaperplus.models.ResultPayload
 import com.flutterwallpaperplus.models.WallpaperConfig
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.*
+import java.io.File
+import java.util.Locale
 
 /**
  * Central method call handler for all plugin operations.
@@ -65,10 +72,11 @@ class WallpaperMethodHandler(
         when (call.method) {
             "setImageWallpaper" -> handleSetImageWallpaper(call, result)
             "setVideoWallpaper" -> handleSetVideoWallpaper(call, result)
-            "getTargetSupportPolicy" -> handleGetTargetSupportPolicy(result)
+            "openNativeWallpaperChooser" -> handleOpenNativeWallpaperChooser(call, result)
+            "getTargetSupportPolicy" -> handleGetTargetSupportPolicy(call, result)
             "getVideoThumbnail" -> handleGetVideoThumbnail(call, result)
-            "clearCache" -> handleClearCache(result)
-            "getCacheSize" -> handleGetCacheSize(result)
+            "clearCache" -> handleClearCache(call, result)
+            "getCacheSize" -> handleGetCacheSize(call, result)
             "setMaxCacheSize" -> handleSetMaxCacheSize(call, result)
             else -> {
                 Log.w(TAG, "Unknown method: ${call.method}")
@@ -209,6 +217,10 @@ class WallpaperMethodHandler(
                     else config.errorMessage
                 )
 
+                if (payload.success && config.goToHome) {
+                    launchHomeScreen()
+                }
+
                 outcome = if (payload.success) "success" else payload.errorCode
                 result.success(payload.toMap())
 
@@ -311,6 +323,7 @@ class WallpaperMethodHandler(
                     TAG,
                     "setVideoWallpaper request: requestedTarget=${config.target}, "
                             + "effectiveTarget=$effectiveTarget, "
+                            + "goToHome=${config.goToHome}, "
                             + "manufacturer=${Build.MANUFACTURER}, model=${Build.MODEL}"
                 )
 
@@ -396,7 +409,9 @@ class WallpaperMethodHandler(
                     prepareLockWallpaperForHomeTargetIfNeeded()
                 }
 
-                val launchResult = launchLiveWallpaperChooser()
+                val launchResult = launchLiveWallpaperChooser(
+                    goToHome = config.goToHome
+                )
 
                 if (launchResult.success) {
                     outcome = "chooser_opened"
@@ -428,7 +443,142 @@ class WallpaperMethodHandler(
         }
     }
 
-    private fun launchLiveWallpaperChooser(): ResultPayload {
+    @Suppress("UNCHECKED_CAST")
+    private fun handleOpenNativeWallpaperChooser(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
+        scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            var outcome = "unknown"
+            try {
+                val args = call.arguments as? Map<String, Any?>
+                if (args == null) {
+                    outcome = "invalid_args"
+                    result.success(
+                        ResultPayload.error(
+                            "Invalid arguments passed to openNativeWallpaperChooser",
+                            "applyFailed"
+                        ).toMap()
+                    )
+                    return@launch
+                }
+
+                val config = try {
+                    WallpaperConfig.fromMap(args)
+                } catch (e: IllegalArgumentException) {
+                    outcome = "invalid_config"
+                    result.success(
+                        ResultPayload.error(
+                            "Invalid configuration: ${e.message}",
+                            "sourceNotFound"
+                        ).toMap()
+                    )
+                    return@launch
+                }
+
+                if (!config.isValid()) {
+                    outcome = "invalid_source"
+                    result.success(
+                        ResultPayload.error(
+                            "Invalid source configuration: "
+                                    + "type='${config.sourceType}', "
+                                    + "path='${config.sourcePath}'",
+                            "sourceNotFound"
+                        ).toMap()
+                    )
+                    return@launch
+                }
+
+                if (config.sourceType == "file") {
+                    if (!isAppInternalPath(config.sourcePath) &&
+                        !PermissionHelper.hasStorageReadPermission(context)
+                    ) {
+                        outcome = "permission_denied"
+                        val payload = ResultPayload.error(
+                            "Storage read permission is required to access "
+                                    + "files outside the app directory.",
+                            "permissionDenied"
+                        )
+                        showToastIfNeeded(config.showToast, config.errorMessage)
+                        result.success(payload.toMap())
+                        return@launch
+                    }
+                }
+
+                val file = try {
+                    sourceResolver.resolve(config.sourceType, config.sourcePath)
+                } catch (e: SourceResolver.SourceNotFoundException) {
+                    outcome = "source_not_found"
+                    val payload = ResultPayload.error(
+                        e.message ?: "Source not found", "sourceNotFound"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                } catch (e: CacheManager.DownloadException) {
+                    outcome = "download_failed"
+                    val payload = ResultPayload.error(
+                        e.message ?: "Download failed", "downloadFailed"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                val launchResult = if (isVideoSource(config.sourcePath, file)) {
+                    if (!PermissionHelper.supportsLiveWallpaper(context)) {
+                        ResultPayload.error(
+                            "Live wallpapers are not supported on this device.",
+                            "unsupported"
+                        )
+                    } else {
+                        val saved = saveVideoWallpaperConfig(file, config)
+                        if (!saved) {
+                            ResultPayload.error(
+                                "Failed to save wallpaper configuration",
+                                "applyFailed"
+                            )
+                        } else {
+                            launchLiveWallpaperChooser(config.goToHome)
+                        }
+                    }
+                } else {
+                    launchImageWallpaperChooser(file, config.goToHome)
+                }
+
+                if (launchResult.success) {
+                    outcome = "chooser_opened"
+                    showToastIfNeeded(config.showToast, config.successMessage)
+                    result.success(ResultPayload.success(config.successMessage).toMap())
+                } else {
+                    outcome = launchResult.errorCode
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(launchResult.toMap())
+                }
+            } catch (e: Exception) {
+                outcome = "exception"
+                Log.e(TAG, "openNativeWallpaperChooser: unexpected exception", e)
+                result.success(
+                    ResultPayload.error(
+                        "Unexpected error: ${e.message ?: "Unknown"}", "unknown"
+                    ).toMap()
+                )
+            } finally {
+                Log.d(
+                    TAG,
+                    "openNativeWallpaperChooser finished: outcome=$outcome, "
+                            + "total=${SystemClock.elapsedRealtime() - startedAt}ms"
+                )
+            }
+        }
+    }
+
+    private fun launchLiveWallpaperChooser(goToHome: Boolean): ResultPayload {
+        if (goToHome) {
+            launchHomeScreen()
+        }
+
         try {
             val componentName = ComponentName(
                 context.packageName,
@@ -471,7 +621,66 @@ class WallpaperMethodHandler(
         )
     }
 
-    private fun handleGetTargetSupportPolicy(result: MethodChannel.Result) {
+    private fun launchImageWallpaperChooser(imageFile: File, goToHome: Boolean): ResultPayload {
+        if (goToHome) {
+            launchHomeScreen()
+        }
+
+        val imageUri = buildShareableUri(imageFile) ?: return ResultPayload.error(
+            "Could not create sharable URI for the image source.",
+            "applyFailed"
+        )
+
+        val attachIntent = Intent(Intent.ACTION_ATTACH_DATA).apply {
+            setDataAndType(imageUri, "image/*")
+            putExtra("mimeType", "image/*")
+            clipData = ClipData.newUri(context.contentResolver, "wallpaper", imageUri)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+
+        try {
+            val activities = context.packageManager.queryIntentActivities(
+                attachIntent,
+                PackageManager.MATCH_DEFAULT_ONLY
+            )
+            for (info in activities) {
+                context.grantUriPermission(
+                    info.activityInfo.packageName,
+                    imageUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+
+            context.startActivity(attachIntent)
+            return ResultPayload.success("Native image wallpaper chooser opened")
+        } catch (e: Exception) {
+            Log.w(TAG, "ACTION_ATTACH_DATA failed, trying generic chooser", e)
+        }
+
+        try {
+            val chooserIntent = Intent(Intent.ACTION_SET_WALLPAPER).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooserIntent)
+            return ResultPayload.success("Wallpaper chooser opened")
+        } catch (e: Exception) {
+            Log.e(TAG, "Wallpaper chooser fallback failed", e)
+        }
+
+        return ResultPayload.error(
+            "Could not open the wallpaper chooser.",
+            "unsupported"
+        )
+    }
+
+    private fun handleGetTargetSupportPolicy(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
+        if (shouldGoToHome(call)) {
+            launchHomeScreen()
+        }
         val restrictive = OemPolicy.isRestrictiveOem()
         result.success(
             hashMapOf<String, Any>(
@@ -658,9 +867,15 @@ class WallpaperMethodHandler(
 
                 val quality = (args["quality"] as? Int) ?: 30
                 val enableCache = (args["cache"] as? Boolean) ?: true
+                val goToHome = (args["goToHome"] as? Boolean) ?: false
+
+                if (goToHome) {
+                    launchHomeScreen()
+                }
 
                 Log.d(TAG, "getVideoThumbnail: type=$sourceType, "
-                        + "path=$sourcePath, quality=$quality, cache=$enableCache")
+                        + "path=$sourcePath, quality=$quality, cache=$enableCache, "
+                        + "goToHome=$goToHome")
 
                 // --- Step 2: Resolve source to local file ---
 
@@ -711,8 +926,14 @@ class WallpaperMethodHandler(
     // Cache Management
     // ================================================================
 
-    private fun handleClearCache(result: MethodChannel.Result) {
+    private fun handleClearCache(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
         scope.launch {
+            if (shouldGoToHome(call)) {
+                launchHomeScreen()
+            }
             try {
                 val success = cacheManager.clearAll()
                 result.success(
@@ -735,8 +956,14 @@ class WallpaperMethodHandler(
         }
     }
 
-    private fun handleGetCacheSize(result: MethodChannel.Result) {
+    private fun handleGetCacheSize(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
         scope.launch {
+            if (shouldGoToHome(call)) {
+                launchHomeScreen()
+            }
             try {
                 val size = cacheManager.totalSize()
                 result.success(size)
@@ -752,6 +979,10 @@ class WallpaperMethodHandler(
         result: MethodChannel.Result
     ) {
         try {
+            if (shouldGoToHome(call)) {
+                launchHomeScreen()
+            }
+
             val maxBytes: Long = when (val raw = call.argument<Any>("maxBytes")) {
                 is Long -> raw
                 is Int -> raw.toLong()
@@ -778,12 +1009,83 @@ class WallpaperMethodHandler(
     // Helpers
     // ================================================================
 
+    @Suppress("UNCHECKED_CAST")
+    private fun shouldGoToHome(call: MethodCall): Boolean {
+        val args = call.arguments as? Map<String, Any?> ?: return false
+        return args["goToHome"] as? Boolean ?: false
+    }
+
+    private fun saveVideoWallpaperConfig(file: File, config: WallpaperConfig): Boolean {
+        val prefs = context.getSharedPreferences(
+            VideoWallpaperService.PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
+        return prefs.edit()
+            .putString(VideoWallpaperService.KEY_VIDEO_PATH, file.absolutePath)
+            .putBoolean(VideoWallpaperService.KEY_ENABLE_AUDIO, config.enableAudio)
+            .putBoolean(VideoWallpaperService.KEY_LOOP, config.loop)
+            .commit()
+    }
+
+    private fun isVideoSource(sourcePath: String, file: File): Boolean {
+        val mimeFromSource = guessMimeType(sourcePath)
+        if (mimeFromSource?.startsWith("video/") == true) return true
+        if (mimeFromSource?.startsWith("image/") == true) return false
+
+        val mimeFromFile = guessMimeType(file.name)
+        if (mimeFromFile?.startsWith("video/") == true) return true
+        if (mimeFromFile?.startsWith("image/") == true) return false
+
+        val candidate = "$sourcePath ${file.name}".lowercase(Locale.US)
+        val videoHints = listOf(
+            ".mp4", ".webm", ".mkv", ".3gp", ".avi", ".mov", ".m4v"
+        )
+        return videoHints.any { candidate.contains(it) }
+    }
+
+    private fun guessMimeType(pathOrUrl: String): String? {
+        val extension = MimeTypeMap.getFileExtensionFromUrl(pathOrUrl)
+            ?.lowercase(Locale.US)
+            ?.takeIf { it.isNotBlank() }
+            ?: return null
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+    }
+
+    private fun buildShareableUri(file: File): Uri? {
+        val authority = "${context.packageName}.flutterwallpaperplus.fileprovider"
+        return try {
+            FileProvider.getUriForFile(context, authority, file)
+        } catch (e: IllegalArgumentException) {
+            Log.e(
+                TAG,
+                "FileProvider could not serve URI for ${file.absolutePath}. " +
+                        "Check file_paths configuration.",
+                e
+            )
+            null
+        }
+    }
+
     private fun showToastIfNeeded(show: Boolean, message: String) {
         if (!show) return
         try {
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to show toast: ${e.message}")
+        }
+    }
+
+    private fun launchHomeScreen(): Boolean {
+        return try {
+            val homeIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_HOME)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(homeIntent)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to launch home screen", e)
+            false
         }
     }
 

@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Chooser & UX
+- Added `FlutterWallpaperPlus.openNativeWallpaperChooser(source: ...)` with required `WallpaperSource` (asset/file/url) to open native chooser flow from explicit media source.
+- Added optional `goToHome` flag across public plugin methods for best-effort app minimization/home navigation behavior.
+
 #### Image Wallpaper
 - Set image wallpaper from Flutter asset, local file, or remote URL
 - Target home screen, lock screen, or both

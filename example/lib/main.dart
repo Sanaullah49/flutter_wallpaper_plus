@@ -43,6 +43,7 @@ class _HomePageState extends State<HomePage> {
   bool _isLoading = false;
   Uint8List? _thumbnailBytes;
   TargetSupportPolicy _policy = TargetSupportPolicy.unknown;
+  bool _goHomeBeforeChooser = false;
 
   @override
   void initState() {
@@ -211,6 +212,21 @@ class _HomePageState extends State<HomePage> {
       ),
     );
   });
+
+  // ================================================================
+  // Native Chooser
+  // ================================================================
+
+  Future<void> _openNativeWallpaperChooser() =>
+      _run('Open native chooser', () async {
+        _showResult(
+          await FlutterWallpaperPlus.openNativeWallpaperChooser(
+            source: WallpaperSource.url(_imageUrl1),
+            goToHome: _goHomeBeforeChooser,
+            successMessage: 'Native wallpaper chooser opened',
+          ),
+        );
+      });
 
   // ================================================================
   // Thumbnail Actions
@@ -490,6 +506,29 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(width: 8),
               Expanded(child: _btn(Icons.replay, 'No Loop', _videoNoLoop)),
             ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Native Chooser
+          _header('Native Wallpaper Chooser'),
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Minimize app and go home first'),
+            subtitle: const Text(
+              'Best-effort behavior before opening the native chooser.',
+            ),
+            value: _goHomeBeforeChooser,
+            onChanged: _isLoading
+                ? null
+                : (value) => setState(() => _goHomeBeforeChooser = value),
+          ),
+          const SizedBox(height: 8),
+          _btn(
+            Icons.wallpaper_outlined,
+            'Open Native Wallpaper Chooser',
+            _openNativeWallpaperChooser,
           ),
 
           const SizedBox(height: 20),

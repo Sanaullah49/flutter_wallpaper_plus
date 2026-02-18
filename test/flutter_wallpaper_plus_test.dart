@@ -26,6 +26,12 @@ void main() {
                 'message': 'Live wallpaper ready',
                 'errorCode': 'none',
               };
+            case 'openNativeWallpaperChooser':
+              return <String, dynamic>{
+                'success': true,
+                'message': 'Wallpaper chooser opened',
+                'errorCode': 'none',
+              };
             case 'getVideoThumbnail':
               return Uint8List.fromList([
                 0xFF, 0xD8, 0xFF, 0xE0, // JPEG magic bytes
@@ -340,12 +346,14 @@ void main() {
         successMessage: 'S',
         errorMessage: 'E',
         showToast: false,
+        goToHome: true,
       );
 
       expect(r.success, isTrue);
       final a = log.first.arguments as Map;
       expect(a['target'], 'both');
       expect(a['showToast'], false);
+      expect(a['goToHome'], true);
       expect((a['source'] as Map)['type'], 'url');
     });
 
@@ -376,6 +384,7 @@ void main() {
       final a = log.first.arguments as Map;
       expect(a['successMessage'], 'Wallpaper set successfully');
       expect(a['showToast'], true);
+      expect(a['goToHome'], false);
     });
 
     test('all targets', () async {
@@ -470,6 +479,7 @@ void main() {
         successMessage: 'S',
         errorMessage: 'E',
         showToast: false,
+        goToHome: true,
       );
 
       expect(r.success, isTrue);
@@ -478,6 +488,7 @@ void main() {
       expect(a['loop'], false);
       expect(a['target'], 'home');
       expect(a['showToast'], false);
+      expect(a['goToHome'], true);
     });
 
     test('defaults', () async {
@@ -489,6 +500,7 @@ void main() {
       expect(a['enableAudio'], false);
       expect(a['loop'], true);
       expect(a['successMessage'], 'Live wallpaper set successfully');
+      expect(a['goToHome'], false);
     });
 
     test('asset', () async {
@@ -559,6 +571,55 @@ void main() {
   });
 
   // ================================================================
+  // openNativeWallpaperChooser
+  // ================================================================
+
+  group('openNativeWallpaperChooser', () {
+    test('all params', () async {
+      final r = await FlutterWallpaperPlus.openNativeWallpaperChooser(
+        source: WallpaperSource.url('https://e.com/bg.jpg'),
+        successMessage: 'Opened',
+        errorMessage: 'Failed',
+        showToast: false,
+        goToHome: true,
+      );
+
+      expect(r.success, isTrue);
+      final a = log.first.arguments as Map;
+      expect(log.first.method, 'openNativeWallpaperChooser');
+      expect(a['successMessage'], 'Opened');
+      expect(a['errorMessage'], 'Failed');
+      expect(a['showToast'], false);
+      expect(a['goToHome'], true);
+      expect((a['source'] as Map)['type'], 'url');
+    });
+
+    test('defaults', () async {
+      await FlutterWallpaperPlus.openNativeWallpaperChooser(
+        source: WallpaperSource.asset('assets/bg.jpg'),
+      );
+      final a = log.first.arguments as Map;
+      expect(a['successMessage'], 'Wallpaper chooser opened');
+      expect(a['showToast'], true);
+      expect(a['goToHome'], false);
+      expect((a['source'] as Map)['type'], 'asset');
+    });
+
+    test('PlatformException', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async {
+            throw PlatformException(code: 'unsupported', message: 'no chooser');
+          });
+
+      final r = await FlutterWallpaperPlus.openNativeWallpaperChooser(
+        source: WallpaperSource.file('/tmp/bg.jpg'),
+      );
+      expect(r.success, isFalse);
+      expect(r.errorCode, WallpaperErrorCode.unsupported);
+    });
+  });
+
+  // ================================================================
   // getVideoThumbnail (Phase 4)
   // ================================================================
 
@@ -624,6 +685,15 @@ void main() {
       );
       final a = log.first.arguments as Map;
       expect(a['cache'], false);
+    });
+
+    test('goToHome true forwards argument', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+        goToHome: true,
+      );
+      final a = log.first.arguments as Map;
+      expect(a['goToHome'], true);
     });
 
     test('clamps quality max to 100', () async {
@@ -720,14 +790,32 @@ void main() {
       expect(log.first.method, 'clearCache');
     });
 
+    test('clearCache goToHome true forwards argument', () async {
+      await FlutterWallpaperPlus.clearCache(goToHome: true);
+      expect((log.first.arguments as Map)['goToHome'], true);
+    });
+
     test('getCacheSize', () async {
       final s = await FlutterWallpaperPlus.getCacheSize();
       expect(s, 1048576);
     });
 
+    test('getCacheSize goToHome true forwards argument', () async {
+      await FlutterWallpaperPlus.getCacheSize(goToHome: true);
+      expect((log.first.arguments as Map)['goToHome'], true);
+    });
+
     test('setMaxCacheSize', () async {
       await FlutterWallpaperPlus.setMaxCacheSize(500 * 1024 * 1024);
       expect((log.first.arguments as Map)['maxBytes'], 500 * 1024 * 1024);
+    });
+
+    test('setMaxCacheSize goToHome true forwards argument', () async {
+      await FlutterWallpaperPlus.setMaxCacheSize(
+        200 * 1024 * 1024,
+        goToHome: true,
+      );
+      expect((log.first.arguments as Map)['goToHome'], true);
     });
 
     test('setMaxCacheSize throws on 0', () {
@@ -750,6 +838,13 @@ void main() {
             throw PlatformException(code: 'e');
           });
       expect(await FlutterWallpaperPlus.getCacheSize(), 0);
+    });
+  });
+
+  group('getTargetSupportPolicy', () {
+    test('goToHome true forwards argument', () async {
+      await FlutterWallpaperPlus.getTargetSupportPolicy(goToHome: true);
+      expect((log.first.arguments as Map)['goToHome'], true);
     });
   });
 }

@@ -22,6 +22,7 @@ Production-grade Flutter plugin for setting **image** and **video (live)** wallp
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
 - [Target Behavior and OEM Limitations](#target-behavior-and-oem-limitations)
+- [Real Device Results](#real-device-results)
 - [FAQ](#faq)
 - [Architecture](#architecture)
 - [Roadmap](#roadmap)
@@ -108,6 +109,7 @@ final result = await FlutterWallpaperPlus.setVideoWallpaper(
   target: WallpaperTarget.home,
   enableAudio: false,
   loop: true,
+  goToHome: false,
 );
 ```
 
@@ -116,6 +118,23 @@ Notes:
 - Android opens the **system live wallpaper chooser** and user confirmation is required.
 - `WallpaperTarget.lock` is not supported for live video wallpaper (`WallpaperErrorCode.unsupported`).
 - Live wallpaper service runs independently after apply (survives app process death).
+
+### Open Native Wallpaper Chooser
+
+```dart
+final result = await FlutterWallpaperPlus.openNativeWallpaperChooser(
+  source: WallpaperSource.url('https://example.com/wallpaper.jpg'),
+  goToHome: true, // optional best-effort: minimize app before chooser
+);
+```
+
+`source` is required and supports:
+
+- `WallpaperSource.asset(...)`
+- `WallpaperSource.file(...)`
+- `WallpaperSource.url(...)`
+
+Source path/URL must be non-empty.
 
 ### Get Device Target Support Policy
 
@@ -163,6 +182,7 @@ print(clearResult.message);
 | --- | --- | --- |
 | `setImageWallpaper(...)` | `Future<WallpaperResult>` | Apply static image wallpaper |
 | `setVideoWallpaper(...)` | `Future<WallpaperResult>` | Launch system chooser for live wallpaper |
+| `openNativeWallpaperChooser(...)` | `Future<WallpaperResult>` | Open native chooser with provided source (asset/file/url) |
 | `getVideoThumbnail(...)` | `Future<Uint8List?>` | Extract video thumbnail bytes |
 | `getTargetSupportPolicy()` | `Future<TargetSupportPolicy>` | Get device/OEM target reliability policy |
 | `clearCache()` | `Future<WallpaperResult>` | Clear cached media + thumbnails |
@@ -225,13 +245,29 @@ On some OEM ROMs (commonly Xiaomi/Redmi/Oppo/Vivo/Realme), lock-screen wallpaper
 - Third-party apps may not reliably force lock wallpaper persistence.
 - Lock/both behavior can diverge from what user selected in the system UI.
 - The plugin may return `WallpaperErrorCode.manufacturerRestriction` for targets known to be unreliable.
+- Similar behavior is likely on other heavily customized OEM ROMs with lock-screen themes/carousel features.
 
 There is currently **no reliable cross-OEM workaround** using public Android APIs.
+
+## Real Device Results
+
+Observed behavior from real testing (as of **February 18, 2026**):
+
+| Device | Image `both` | Video `both` | Notes |
+| --- | --- | --- | --- |
+| Pixel 6 (emulator) | Works | Works | Smooth and expected behavior |
+| Oppo Reno Z | Not reliable (does not apply both for image) | Works | `both` is effectively reliable only for video |
+| Redmi 13C | Not reliable (applies to home only) | Not reliable (applies to home only) | `both` selection does not persist as both |
+
+Additional Redmi 13C note:
+
+- In some cases, video wallpaper may briefly appear on lock, then revert to the user lock-screen slideshow/carousel managed by the OEM system.
 
 ### Recommended App-Side UX
 
 - Query `getTargetSupportPolicy()` before showing target options.
 - Disable unreliable target choices in your UI.
+- Prefer `home` target by default on restrictive OEMs.
 - Explain to users when device policy may override lock-screen wallpaper behavior.
 
 ## FAQ
@@ -275,8 +311,8 @@ Flutter (Dart API)
 
 Planned next additions:
 
-- Open native wallpaper chooser API for user-driven apply flow
-- Optional "minimize app and go to Home" helper/check for smoother apply UX
+- Expand OEM policy coverage and reliability hints for more manufacturers
+- Add more end-to-end integration testing across Android OEM variants
 
 ## License
 

@@ -101,6 +101,11 @@ class FlutterWallpaperPlus {
   ///   Set to `false` if you want to handle UI feedback yourself.
   ///   Default: `true`.
   ///
+  /// - [goToHome] — Best-effort request to launch the home screen
+  ///   after successful apply. Useful when you want users to preview
+  ///   the wallpaper immediately.
+  ///   Default: `false`.
+  ///
   /// ### Returns
   ///
   /// A [WallpaperResult] with:
@@ -124,6 +129,7 @@ class FlutterWallpaperPlus {
     String? successMessage,
     String? errorMessage,
     bool showToast = true,
+    bool goToHome = false,
   }) {
     return FlutterWallpaperPlusImpl.setImageWallpaper(
       source: source,
@@ -131,6 +137,7 @@ class FlutterWallpaperPlus {
       successMessage: successMessage,
       errorMessage: errorMessage,
       showToast: showToast,
+      goToHome: goToHome,
     );
   }
 
@@ -164,6 +171,10 @@ class FlutterWallpaperPlus {
   /// - [successMessage] / [errorMessage] / [showToast] — Same as
   ///   [setImageWallpaper].
   ///
+  /// - [goToHome] — Best-effort request to send app to home screen
+  ///   before launching the system chooser.
+  ///   Default: `false`.
+  ///
   /// ### Example
   ///
   /// ```dart
@@ -182,6 +193,7 @@ class FlutterWallpaperPlus {
     String? successMessage,
     String? errorMessage,
     bool showToast = true,
+    bool goToHome = false,
   }) {
     return FlutterWallpaperPlusImpl.setVideoWallpaper(
       source: source,
@@ -191,6 +203,32 @@ class FlutterWallpaperPlus {
       successMessage: successMessage,
       errorMessage: errorMessage,
       showToast: showToast,
+      goToHome: goToHome,
+    );
+  }
+
+  /// Opens Android's native wallpaper chooser/settings flow.
+  ///
+  /// This is useful when you want to hand control to the OEM/system
+  /// wallpaper UI using an explicit [source].
+  ///
+  /// [source] supports asset/file/url and must not be empty.
+  ///
+  /// - [goToHome] optionally launches home first so your app is
+  ///   minimized when the chooser appears.
+  static Future<WallpaperResult> openNativeWallpaperChooser({
+    required WallpaperSource source,
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+    bool goToHome = false,
+  }) {
+    return FlutterWallpaperPlusImpl.openNativeWallpaperChooser(
+      source: source,
+      successMessage: successMessage,
+      errorMessage: errorMessage,
+      showToast: showToast,
+      goToHome: goToHome,
     );
   }
 
@@ -215,6 +253,9 @@ class FlutterWallpaperPlus {
   ///   subsequent calls return instantly.
   ///   Default: `true`.
   ///
+  /// - [goToHome] — Best-effort request to launch home first.
+  ///   Default: `false`.
+  ///
   /// ### Example
   ///
   /// ```dart
@@ -232,19 +273,23 @@ class FlutterWallpaperPlus {
     required WallpaperSource source,
     int quality = 30,
     bool cache = true,
+    bool goToHome = false,
   }) {
     return FlutterWallpaperPlusImpl.getVideoThumbnail(
       source: source,
       quality: quality,
       cache: cache,
+      goToHome: goToHome,
     );
   }
 
   /// Returns device policy for wallpaper target reliability/support.
   ///
   /// Use this to disable unsupported or unreliable target options in UI.
-  static Future<TargetSupportPolicy> getTargetSupportPolicy() {
-    return FlutterWallpaperPlusImpl.getTargetSupportPolicy();
+  static Future<TargetSupportPolicy> getTargetSupportPolicy({
+    bool goToHome = false,
+  }) {
+    return FlutterWallpaperPlusImpl.getTargetSupportPolicy(goToHome: goToHome);
   }
 
   /// Clears all cached media files and thumbnails.
@@ -256,8 +301,8 @@ class FlutterWallpaperPlus {
   /// final result = await FlutterWallpaperPlus.clearCache();
   /// print(result.success ? 'Cleared!' : 'Failed: ${result.message}');
   /// ```
-  static Future<WallpaperResult> clearCache() {
-    return FlutterWallpaperPlusImpl.clearCache();
+  static Future<WallpaperResult> clearCache({bool goToHome = false}) {
+    return FlutterWallpaperPlusImpl.clearCache(goToHome: goToHome);
   }
 
   /// Returns the total size of all cached files in bytes.
@@ -269,8 +314,8 @@ class FlutterWallpaperPlus {
   /// final mb = (bytes / (1024 * 1024)).toStringAsFixed(2);
   /// print('Cache: $mb MB');
   /// ```
-  static Future<int> getCacheSize() {
-    return FlutterWallpaperPlusImpl.getCacheSize();
+  static Future<int> getCacheSize({bool goToHome = false}) {
+    return FlutterWallpaperPlusImpl.getCacheSize(goToHome: goToHome);
   }
 
   /// Configures the maximum cache size in bytes.
@@ -287,7 +332,10 @@ class FlutterWallpaperPlus {
   /// // Set cache limit to 100 MB
   /// await FlutterWallpaperPlus.setMaxCacheSize(100 * 1024 * 1024);
   /// ```
-  static Future<void> setMaxCacheSize(int maxBytes) {
-    return FlutterWallpaperPlusImpl.setMaxCacheSize(maxBytes);
+  static Future<void> setMaxCacheSize(int maxBytes, {bool goToHome = false}) {
+    return FlutterWallpaperPlusImpl.setMaxCacheSize(
+      maxBytes,
+      goToHome: goToHome,
+    );
   }
 }
