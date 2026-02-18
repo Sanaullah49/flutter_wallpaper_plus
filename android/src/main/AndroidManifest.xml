@@ -1,0 +1,73 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.flutterwallpaperplus">
+
+    <!--
+        SET_WALLPAPER: Normal permission, auto-granted.
+        Required to use WallpaperManager.setStream().
+    -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+
+    <!--
+        INTERNET: Normal permission, auto-granted.
+        Required for downloading wallpapers from URLs.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        ACCESS_NETWORK_STATE: Normal permission, auto-granted.
+        Used by OkHttp for connection management.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        READ_EXTERNAL_STORAGE: Dangerous permission.
+        Required only for WallpaperSource.file() with paths outside app directory.
+        maxSdkVersion=32 because Android 13+ uses granular media permissions.
+    -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!--
+        Android 13+ granular media permissions.
+        Only needed for WallpaperSource.file() with external media files.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!--
+        Declare live wallpaper feature as optional.
+        required=false means the app can still be installed on devices
+        without live wallpaper support. The plugin handles this gracefully.
+    -->
+    <uses-feature
+        android:name="android.software.live_wallpaper"
+        android:required="false" />
+
+    <application>
+        <!--
+            Video wallpaper service — Phase 3 will implement the class.
+            Declared here in Phase 1 so the manifest is complete.
+
+            - exported=true: required for the system to bind to it
+            - permission=BIND_WALLPAPER: system-only binding for security
+            - The intent-filter declares this as a wallpaper service
+            - The meta-data points to the XML descriptor
+        -->
+        <service
+            android:name=".VideoWallpaperService"
+            android:exported="true"
+            android:label="Video Wallpaper"
+            android:permission="android.permission.BIND_WALLPAPER">
+
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/video_wallpaper" />
+        </service>
+    </application>
+
+</manifest>

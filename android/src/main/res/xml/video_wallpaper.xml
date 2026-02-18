@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Wallpaper service descriptor required by Android for all live wallpapers.
+
+    This XML is referenced from the <service> meta-data in AndroidManifest.xml.
+
+    Note: We intentionally omit android:description because it requires
+    a string resource, and plugin libraries cannot guarantee the host app
+    has any specific string resource defined. The system handles a missing
+    description gracefully by showing the service label instead.
+
+    If the host app wants a custom description, they can override this
+    via Android manifest merging by declaring their own service entry.
+-->
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android" />
