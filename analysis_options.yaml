@@ -13,5 +13,9 @@ linter:
     prefer_is_empty: true
     always_declare_return_types: true
     annotate_overrides: true
-    avoid_redundant_argument_values: false
     prefer_relative_imports: true
+    unawaited_futures: true
+    unnecessary_lambdas: true
+    prefer_const_literals_to_create_immutables: true
+    sized_box_for_whitespace: true
+    use_key_in_widget_constructors: true

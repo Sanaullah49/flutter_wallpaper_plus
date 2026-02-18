@@ -1,12 +1,23 @@
 name: flutter_wallpaper_plus
 description: >-
   Production-grade Flutter plugin for setting image and video (live) wallpapers
-  on Android. Supports assets, files, URLs with caching, thumbnails, toast
-  customization, and structured error handling.
+    on Android. Supports assets, files, URLs, caching, thumbnails, and structured
+    error handling.
 version: 1.0.0
 homepage: https://github.com/Sanaullah49/flutter_wallpaper_plus
 repository: https://github.com/Sanaullah49/flutter_wallpaper_plus
 issue_tracker: https://github.com/Sanaullah49/flutter_wallpaper_plus/issues
+
+topics:
+  - wallpaper
+  - live-wallpaper
+  - android
+  - video
+  - image
+
+screenshots:
+  - description: 'Example app showing all plugin features'
+    path: screenshots/example_app.png
 
 environment:
   sdk: ^3.11.0
