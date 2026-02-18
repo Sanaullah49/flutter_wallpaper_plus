@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_wallpaper_plus/flutter_wallpaper_plus.dart';
 
@@ -28,8 +30,8 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String _status = 'Ready — tap a button to test';
   bool _isLoading = false;
+  Uint8List? _thumbnailBytes;
 
-  // Sample URLs — replace with your own for testing
   static const _sampleImageUrl =
       'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
       '?w=1080&q=80';
@@ -38,41 +40,30 @@ class _HomePageState extends State<HomePage> {
       'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05'
       '?w=1080&q=80';
 
-  // Sample video URL — use a short mp4 for testing
-  // Replace with your own video URL
   static const _sampleVideoUrl =
       'https://commondatastorage.googleapis.com/gtv-videos-bucket/'
       'sample/ForBiggerBlazes.mp4';
 
   void _setStatus(String status) {
-    if (mounted) {
-      setState(() {
-        _status = status;
-      });
-    }
+    if (mounted) setState(() => _status = status);
   }
 
   void _setLoading(bool loading) {
-    if (mounted) {
-      setState(() {
-        _isLoading = loading;
-      });
-    }
+    if (mounted) setState(() => _isLoading = loading);
   }
 
   // ================================================================
   // Image Wallpaper
   // ================================================================
 
-  Future<void> _setImageFromUrlBoth() async {
+  Future<void> _setImageBoth() async {
     _setLoading(true);
-    _setStatus('Downloading and setting wallpaper (both screens)...');
+    _setStatus('Setting image wallpaper (both screens)...');
 
     final result = await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.url(_sampleImageUrl),
       target: WallpaperTarget.both,
-      successMessage: 'Nature wallpaper applied to both screens!',
-      errorMessage: 'Could not set wallpaper',
+      successMessage: 'Wallpaper applied to both screens!',
     );
 
     _setLoading(false);
@@ -83,14 +74,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _setImageFromUrlHome() async {
+  Future<void> _setImageHome() async {
     _setLoading(true);
-    _setStatus('Setting wallpaper (home screen only)...');
+    _setStatus('Setting image wallpaper (home)...');
 
     final result = await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.url(_sampleImageUrl2),
       target: WallpaperTarget.home,
-      successMessage: 'Home screen wallpaper updated!',
     );
 
     _setLoading(false);
@@ -101,14 +91,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _setImageFromUrlLock() async {
+  Future<void> _setImageLock() async {
     _setLoading(true);
-    _setStatus('Setting wallpaper (lock screen only)...');
+    _setStatus('Setting image wallpaper (lock)...');
 
     final result = await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.url(_sampleImageUrl),
       target: WallpaperTarget.lock,
-      successMessage: 'Lock screen wallpaper updated!',
     );
 
     _setLoading(false);
@@ -119,14 +108,13 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _setImageFromAsset() async {
+  Future<void> _setImageAsset() async {
     _setLoading(true);
     _setStatus('Setting wallpaper from asset...');
 
     final result = await FlutterWallpaperPlus.setImageWallpaper(
       source: WallpaperSource.asset('assets/sample_wallpaper.jpg'),
       target: WallpaperTarget.both,
-      successMessage: 'Asset wallpaper applied!',
     );
 
     _setLoading(false);
@@ -141,17 +129,16 @@ class _HomePageState extends State<HomePage> {
   // Video Wallpaper
   // ================================================================
 
-  Future<void> _setVideoWallpaperFromUrl() async {
+  Future<void> _setVideoSilentLoop() async {
     _setLoading(true);
-    _setStatus('Downloading video and preparing live wallpaper...');
+    _setStatus('Preparing video wallpaper (silent, loop)...');
 
     final result = await FlutterWallpaperPlus.setVideoWallpaper(
       source: WallpaperSource.url(_sampleVideoUrl),
       target: WallpaperTarget.home,
       enableAudio: false,
       loop: true,
-      successMessage: 'Video wallpaper ready — please confirm!',
-      errorMessage: 'Could not set video wallpaper',
+      successMessage: 'Video wallpaper ready!',
     );
 
     _setLoading(false);
@@ -162,16 +149,15 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _setVideoWallpaperWithAudio() async {
+  Future<void> _setVideoWithAudio() async {
     _setLoading(true);
-    _setStatus('Preparing video wallpaper with audio...');
+    _setStatus('Preparing video wallpaper (audio, loop)...');
 
     final result = await FlutterWallpaperPlus.setVideoWallpaper(
       source: WallpaperSource.url(_sampleVideoUrl),
       target: WallpaperTarget.home,
       enableAudio: true,
       loop: true,
-      successMessage: 'Video wallpaper with audio ready!',
     );
 
     _setLoading(false);
@@ -182,7 +168,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _setVideoWallpaperNoLoop() async {
+  Future<void> _setVideoNoLoop() async {
     _setLoading(true);
     _setStatus('Preparing video wallpaper (no loop)...');
 
@@ -191,28 +177,6 @@ class _HomePageState extends State<HomePage> {
       target: WallpaperTarget.home,
       enableAudio: false,
       loop: false,
-      successMessage: 'Video wallpaper (single play) ready!',
-    );
-
-    _setLoading(false);
-    _setStatus(
-      result.success
-          ? '✅ ${result.message}'
-          : '❌ ${result.message}\n(${result.errorCode.name})',
-    );
-  }
-
-  Future<void> _setVideoWallpaperFromAsset() async {
-    _setLoading(true);
-    _setStatus('Setting video wallpaper from asset...');
-
-    // Note: You need to add a sample .mp4 to example/assets/ for this to work
-    final result = await FlutterWallpaperPlus.setVideoWallpaper(
-      source: WallpaperSource.asset('assets/sample_video.mp4'),
-      target: WallpaperTarget.home,
-      enableAudio: false,
-      loop: true,
-      successMessage: 'Asset video wallpaper ready!',
     );
 
     _setLoading(false);
@@ -224,73 +188,135 @@ class _HomePageState extends State<HomePage> {
   }
 
   // ================================================================
-  // Error Handling Tests
+  // Thumbnail Generation (Phase 4)
   // ================================================================
 
-  Future<void> _testInvalidUrl() async {
+  Future<void> _generateThumbnailFromUrl() async {
     _setLoading(true);
-    _setStatus('Testing error handling (bad URL)...');
+    _setStatus('Generating thumbnail from URL...');
 
-    final result = await FlutterWallpaperPlus.setImageWallpaper(
-      source: WallpaperSource.url(
-        'https://invalid.example.com/nonexistent.jpg',
-      ),
-      target: WallpaperTarget.home,
-      showToast: false,
+    final stopwatch = Stopwatch()..start();
+
+    final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      quality: 50,
+      cache: true,
     );
 
+    stopwatch.stop();
     _setLoading(false);
-    _setStatus(
-      '⚠️ ${result.message}\n'
-      'Error code: ${result.errorCode.name}\n'
-      '(This error was intentional)',
-    );
+
+    if (bytes != null) {
+      setState(() => _thumbnailBytes = bytes);
+      _setStatus(
+        '✅ Thumbnail generated!\n'
+        'Size: ${(bytes.length / 1024).toStringAsFixed(1)} KB\n'
+        'Time: ${stopwatch.elapsedMilliseconds}ms',
+      );
+    } else {
+      _setStatus('❌ Thumbnail generation failed');
+    }
   }
 
-  Future<void> _testCachePerformance() async {
+  Future<void> _generateThumbnailCached() async {
     _setLoading(true);
-    _setStatus('First call: downloading...');
 
+    // First call — generates and caches
     final stopwatch1 = Stopwatch()..start();
-    final result1 = await FlutterWallpaperPlus.setImageWallpaper(
-      source: WallpaperSource.url(_sampleImageUrl),
-      target: WallpaperTarget.home,
-      showToast: false,
+    final bytes1 = await FlutterWallpaperPlus.getVideoThumbnail(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      quality: 50,
+      cache: true,
     );
     stopwatch1.stop();
 
-    if (!result1.success) {
+    if (bytes1 == null) {
       _setLoading(false);
-      _setStatus('❌ First call failed: ${result1.message}');
+      _setStatus('❌ First thumbnail generation failed');
       return;
     }
 
-    _setStatus('Second call: using cache...');
-
+    // Second call — should use cache
     final stopwatch2 = Stopwatch()..start();
-    await FlutterWallpaperPlus.setImageWallpaper(
-      source: WallpaperSource.url(_sampleImageUrl),
-      target: WallpaperTarget.home,
-      showToast: false,
+    final bytes2 = await FlutterWallpaperPlus.getVideoThumbnail(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      quality: 50,
+      cache: true,
     );
     stopwatch2.stop();
 
     _setLoading(false);
 
-    final speedup = stopwatch2.elapsedMilliseconds == 0
-        ? 'instant'
-        : '${(stopwatch1.elapsedMilliseconds / stopwatch2.elapsedMilliseconds).toStringAsFixed(1)}x';
+    if (bytes2 != null) {
+      setState(() => _thumbnailBytes = bytes2);
 
-    _setStatus(
-      '✅ Cache performance test\n'
-      'First call (download): ${stopwatch1.elapsedMilliseconds}ms\n'
-      'Second call (cached): ${stopwatch2.elapsedMilliseconds}ms\n'
-      'Speedup: $speedup faster',
+      final speedup = stopwatch2.elapsedMilliseconds == 0
+          ? 'instant'
+          : '${(stopwatch1.elapsedMilliseconds / stopwatch2.elapsedMilliseconds).toStringAsFixed(1)}x';
+
+      _setStatus(
+        '✅ Thumbnail cache test\n'
+        'First call: ${stopwatch1.elapsedMilliseconds}ms '
+        '(${(bytes1.length / 1024).toStringAsFixed(1)} KB)\n'
+        'Second call: ${stopwatch2.elapsedMilliseconds}ms (cached)\n'
+        'Speedup: $speedup faster',
+      );
+    }
+  }
+
+  Future<void> _generateThumbnailLowQuality() async {
+    _setLoading(true);
+    _setStatus('Generating low quality thumbnail (q=10)...');
+
+    final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      quality: 10,
+      cache: false,
     );
+
+    _setLoading(false);
+
+    if (bytes != null) {
+      setState(() => _thumbnailBytes = bytes);
+      _setStatus(
+        '✅ Low quality thumbnail\n'
+        'Size: ${(bytes.length / 1024).toStringAsFixed(1)} KB (quality=10)',
+      );
+    } else {
+      _setStatus('❌ Generation failed');
+    }
+  }
+
+  Future<void> _generateThumbnailHighQuality() async {
+    _setLoading(true);
+    _setStatus('Generating high quality thumbnail (q=90)...');
+
+    final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+      source: WallpaperSource.url(_sampleVideoUrl),
+      quality: 90,
+      cache: false,
+    );
+
+    _setLoading(false);
+
+    if (bytes != null) {
+      setState(() => _thumbnailBytes = bytes);
+      _setStatus(
+        '✅ High quality thumbnail\n'
+        'Size: ${(bytes.length / 1024).toStringAsFixed(1)} KB (quality=90)',
+      );
+    } else {
+      _setStatus('❌ Generation failed');
+    }
+  }
+
+  void _clearThumbnail() {
+    setState(() => _thumbnailBytes = null);
+    _setStatus('Thumbnail cleared');
   }
 
   // ================================================================
-  // Cache Operations
+  // Cache
   // ================================================================
 
   Future<void> _getCacheSize() async {
@@ -306,7 +332,70 @@ class _HomePageState extends State<HomePage> {
     final result = await FlutterWallpaperPlus.clearCache();
 
     _setLoading(false);
+    setState(() => _thumbnailBytes = null);
     _setStatus(result.success ? '✅ ${result.message}' : '❌ ${result.message}');
+  }
+
+  // ================================================================
+  // Error Tests
+  // ================================================================
+
+  Future<void> _testBadUrl() async {
+    _setLoading(true);
+    _setStatus('Testing error handling...');
+
+    final result = await FlutterWallpaperPlus.setImageWallpaper(
+      source: WallpaperSource.url('https://invalid.example.com/nope.jpg'),
+      target: WallpaperTarget.home,
+      showToast: false,
+    );
+
+    _setLoading(false);
+    _setStatus(
+      '⚠️ ${result.message}\n'
+      'Code: ${result.errorCode.name}\n'
+      '(Intentional error test)',
+    );
+  }
+
+  Future<void> _testCachePerformance() async {
+    _setLoading(true);
+    _setStatus('Cache performance test...');
+
+    final sw1 = Stopwatch()..start();
+    final r1 = await FlutterWallpaperPlus.setImageWallpaper(
+      source: WallpaperSource.url(_sampleImageUrl),
+      target: WallpaperTarget.home,
+      showToast: false,
+    );
+    sw1.stop();
+
+    if (!r1.success) {
+      _setLoading(false);
+      _setStatus('❌ ${r1.message}');
+      return;
+    }
+
+    final sw2 = Stopwatch()..start();
+    await FlutterWallpaperPlus.setImageWallpaper(
+      source: WallpaperSource.url(_sampleImageUrl),
+      target: WallpaperTarget.home,
+      showToast: false,
+    );
+    sw2.stop();
+
+    _setLoading(false);
+
+    final speedup = sw2.elapsedMilliseconds == 0
+        ? 'instant'
+        : '${(sw1.elapsedMilliseconds / sw2.elapsedMilliseconds).toStringAsFixed(1)}x';
+
+    _setStatus(
+      '✅ Cache performance\n'
+      'Download: ${sw1.elapsedMilliseconds}ms\n'
+      'Cached: ${sw2.elapsedMilliseconds}ms\n'
+      'Speedup: $speedup',
+    );
   }
 
   // ================================================================
@@ -317,7 +406,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Wallpaper Plus — Phase 3'),
+        title: const Text('Wallpaper Plus — Phase 4'),
         actions: [
           IconButton(
             icon: const Icon(Icons.storage),
@@ -336,7 +425,7 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Status card
+            // Status
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -357,13 +446,43 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
+            // Thumbnail preview
+            if (_thumbnailBytes != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    Image.memory(
+                      _thumbnailBytes!,
+                      width: double.infinity,
+                      height: 200,
+                      fit: BoxFit.cover,
+                    ),
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: IconButton.filled(
+                        onPressed: _clearThumbnail,
+                        icon: const Icon(Icons.close, size: 18),
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.black54,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             const SizedBox(height: 24),
 
-            // --- Image Wallpaper ---
-            _sectionHeader(context, 'Image Wallpaper — URL'),
+            // Image Wallpaper
+            _section(context, 'Image Wallpaper'),
             const SizedBox(height: 8),
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _setImageFromUrlBoth,
+              onPressed: _isLoading ? null : _setImageBoth,
               icon: const Icon(Icons.wallpaper),
               label: const Text('URL → Both Screens'),
             ),
@@ -372,7 +491,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _setImageFromUrlHome,
+                    onPressed: _isLoading ? null : _setImageHome,
                     icon: const Icon(Icons.home),
                     label: const Text('Home'),
                   ),
@@ -380,7 +499,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _setImageFromUrlLock,
+                    onPressed: _isLoading ? null : _setImageLock,
                     icon: const Icon(Icons.lock),
                     label: const Text('Lock'),
                   ),
@@ -389,55 +508,96 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 8),
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _setImageFromAsset,
+              onPressed: _isLoading ? null : _setImageAsset,
               icon: const Icon(Icons.folder),
               label: const Text('Asset → Both Screens'),
             ),
 
             const SizedBox(height: 24),
 
-            // --- Video Wallpaper ---
-            _sectionHeader(context, 'Video (Live) Wallpaper'),
+            // Video Wallpaper
+            _section(context, 'Video (Live) Wallpaper'),
             const SizedBox(height: 8),
             ElevatedButton.icon(
-              onPressed: _isLoading ? null : _setVideoWallpaperFromUrl,
+              onPressed: _isLoading ? null : _setVideoSilentLoop,
               icon: const Icon(Icons.videocam),
-              label: const Text('Video URL — No Audio, Loop'),
+              label: const Text('Silent + Loop'),
             ),
             const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _setVideoWallpaperWithAudio,
-              icon: const Icon(Icons.volume_up),
-              label: const Text('Video URL — With Audio, Loop'),
-            ),
-            const SizedBox(height: 8),
-            ElevatedButton.icon(
-              onPressed: _isLoading ? null : _setVideoWallpaperNoLoop,
-              icon: const Icon(Icons.replay),
-              label: const Text('Video URL — No Audio, No Loop'),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _isLoading ? null : _setVideoWallpaperFromAsset,
-              icon: const Icon(Icons.folder_special),
-              label: const Text('Video Asset (needs sample_video.mp4)'),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _setVideoWithAudio,
+                    icon: const Icon(Icons.volume_up),
+                    label: const Text('Audio'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _setVideoNoLoop,
+                    icon: const Icon(Icons.replay),
+                    label: const Text('No Loop'),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 24),
 
-            // --- Tests ---
-            _sectionHeader(context, 'Tests'),
+            // Thumbnail Generation
+            _section(context, 'Video Thumbnail'),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _generateThumbnailFromUrl,
+              icon: const Icon(Icons.image),
+              label: const Text('Generate Thumbnail (q=50)'),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _generateThumbnailCached,
+              icon: const Icon(Icons.cached),
+              label: const Text('Cache Performance Test'),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _generateThumbnailLowQuality,
+                    icon: const Icon(Icons.compress),
+                    label: const Text('q=10'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : _generateThumbnailHighQuality,
+                    icon: const Icon(Icons.high_quality),
+                    label: const Text('q=90'),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 24),
+
+            // Tests
+            _section(context, 'Tests'),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _isLoading ? null : _testCachePerformance,
               icon: const Icon(Icons.speed),
-              label: const Text('Cache Performance Test'),
+              label: const Text('Image Cache Performance'),
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: _isLoading ? null : _testInvalidUrl,
+              onPressed: _isLoading ? null : _testBadUrl,
               icon: const Icon(Icons.error_outline),
-              label: const Text('Test Error Handling (Bad URL)'),
+              label: const Text('Error Handling (Bad URL)'),
             ),
 
             const SizedBox(height: 32),
@@ -447,7 +607,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _sectionHeader(BuildContext context, String title) {
+  Widget _section(BuildContext context, String title) {
     return Row(
       children: [
         Text(

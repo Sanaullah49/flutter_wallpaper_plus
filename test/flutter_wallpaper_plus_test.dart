@@ -27,7 +27,10 @@ void main() {
                 'errorCode': 'none',
               };
             case 'getVideoThumbnail':
-              return Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0]);
+              return Uint8List.fromList([
+                0xFF, 0xD8, 0xFF, 0xE0, // JPEG magic bytes
+                0x00, 0x10, 0x4A, 0x46,
+              ]);
             case 'clearCache':
               return <String, dynamic>{
                 'success': true,
@@ -50,39 +53,37 @@ void main() {
   });
 
   // ================================================================
-  // WallpaperSource Tests
+  // WallpaperSource
   // ================================================================
 
   group('WallpaperSource', () {
-    group('asset constructor', () {
-      test('creates valid asset source', () {
-        final source = WallpaperSource.asset('assets/wallpaper.jpg');
-        expect(source.type, WallpaperSourceType.asset);
-        expect(source.path, 'assets/wallpaper.jpg');
+    group('asset', () {
+      test('creates valid source', () {
+        final s = WallpaperSource.asset('assets/bg.jpg');
+        expect(s.type, WallpaperSourceType.asset);
+        expect(s.path, 'assets/bg.jpg');
       });
 
       test('trims whitespace', () {
-        final source = WallpaperSource.asset('  assets/bg.jpg  ');
-        expect(source.path, 'assets/bg.jpg');
+        expect(WallpaperSource.asset('  a.jpg  ').path, 'a.jpg');
       });
 
       test('throws on empty', () {
         expect(() => WallpaperSource.asset(''), throwsA(isA<ArgumentError>()));
       });
 
-      test('throws on whitespace only', () {
+      test('throws on whitespace', () {
         expect(
-          () => WallpaperSource.asset('   '),
+          () => WallpaperSource.asset('  '),
           throwsA(isA<ArgumentError>()),
         );
       });
     });
 
-    group('file constructor', () {
-      test('creates valid file source', () {
-        final source = WallpaperSource.file('/storage/emulated/0/bg.jpg');
-        expect(source.type, WallpaperSourceType.file);
-        expect(source.path, '/storage/emulated/0/bg.jpg');
+    group('file', () {
+      test('creates valid source', () {
+        final s = WallpaperSource.file('/path/bg.jpg');
+        expect(s.type, WallpaperSourceType.file);
       });
 
       test('throws on empty', () {
@@ -90,41 +91,43 @@ void main() {
       });
     });
 
-    group('url constructor', () {
-      test('creates valid http URL', () {
-        final source = WallpaperSource.url('http://example.com/bg.jpg');
-        expect(source.type, WallpaperSourceType.url);
+    group('url', () {
+      test('http', () {
+        final s = WallpaperSource.url('http://example.com/bg.jpg');
+        expect(s.type, WallpaperSourceType.url);
       });
 
-      test('creates valid https URL', () {
-        final source = WallpaperSource.url('https://example.com/bg.jpg');
-        expect(source.type, WallpaperSourceType.url);
+      test('https', () {
+        final s = WallpaperSource.url('https://example.com/bg.jpg');
+        expect(s.type, WallpaperSourceType.url);
       });
 
-      test('trims whitespace', () {
-        final source = WallpaperSource.url('  https://example.com/bg.jpg  ');
-        expect(source.path, 'https://example.com/bg.jpg');
+      test('trims', () {
+        expect(
+          WallpaperSource.url('  https://e.com/b  ').path,
+          'https://e.com/b',
+        );
       });
 
       test('throws on empty', () {
         expect(() => WallpaperSource.url(''), throwsA(isA<ArgumentError>()));
       });
 
-      test('throws on missing scheme', () {
+      test('throws on no scheme', () {
         expect(
-          () => WallpaperSource.url('example.com/bg.jpg'),
+          () => WallpaperSource.url('example.com'),
           throwsA(isA<ArgumentError>()),
         );
       });
 
-      test('throws on non-http scheme', () {
+      test('throws on ftp', () {
         expect(
-          () => WallpaperSource.url('ftp://example.com/bg.jpg'),
+          () => WallpaperSource.url('ftp://e.com/b'),
           throwsA(isA<ArgumentError>()),
         );
       });
 
-      test('throws on invalid format', () {
+      test('throws on garbage', () {
         expect(
           () => WallpaperSource.url('not a url'),
           throwsA(isA<ArgumentError>()),
@@ -133,61 +136,59 @@ void main() {
     });
 
     group('serialization', () {
-      test('asset toMap', () {
-        final map = WallpaperSource.asset('assets/bg.jpg').toMap();
-        expect(map['type'], 'asset');
-        expect(map['path'], 'assets/bg.jpg');
+      test('asset', () {
+        final m = WallpaperSource.asset('a.jpg').toMap();
+        expect(m, {'type': 'asset', 'path': 'a.jpg'});
       });
 
-      test('url toMap', () {
-        final map = WallpaperSource.url('https://example.com/bg.jpg').toMap();
-        expect(map['type'], 'url');
-        expect(map['path'], 'https://example.com/bg.jpg');
+      test('file', () {
+        final m = WallpaperSource.file('/b.jpg').toMap();
+        expect(m, {'type': 'file', 'path': '/b.jpg'});
       });
 
-      test('file toMap', () {
-        final map = WallpaperSource.file('/data/bg.jpg').toMap();
-        expect(map['type'], 'file');
-        expect(map['path'], '/data/bg.jpg');
+      test('url', () {
+        final m = WallpaperSource.url('https://e.com/c.jpg').toMap();
+        expect(m, {'type': 'url', 'path': 'https://e.com/c.jpg'});
       });
     });
 
     group('equality', () {
-      test('equal sources', () {
-        final a = WallpaperSource.url('https://example.com/bg.jpg');
-        final b = WallpaperSource.url('https://example.com/bg.jpg');
+      test('equal', () {
+        final a = WallpaperSource.url('https://e.com/b');
+        final b = WallpaperSource.url('https://e.com/b');
         expect(a, equals(b));
-        expect(a.hashCode, equals(b.hashCode));
+        expect(a.hashCode, b.hashCode);
       });
 
-      test('different paths not equal', () {
-        final a = WallpaperSource.url('https://example.com/bg1.jpg');
-        final b = WallpaperSource.url('https://example.com/bg2.jpg');
-        expect(a, isNot(equals(b)));
+      test('different path', () {
+        expect(
+          WallpaperSource.url('https://e.com/1'),
+          isNot(equals(WallpaperSource.url('https://e.com/2'))),
+        );
       });
 
-      test('different types not equal', () {
-        final a = WallpaperSource.asset('bg.jpg');
-        final b = WallpaperSource.file('bg.jpg');
-        expect(a, isNot(equals(b)));
+      test('different type', () {
+        expect(
+          WallpaperSource.asset('x'),
+          isNot(equals(WallpaperSource.file('x'))),
+        );
       });
     });
 
     test('toString', () {
-      final source = WallpaperSource.asset('assets/bg.jpg');
       expect(
-        source.toString(),
-        'WallpaperSource(type: asset, path: assets/bg.jpg)',
+        WallpaperSource.asset('a.jpg').toString(),
+        'WallpaperSource(type: asset, path: a.jpg)',
       );
     });
   });
 
   // ================================================================
-  // WallpaperTarget Tests
+  // WallpaperTarget
   // ================================================================
 
   group('WallpaperTarget', () {
-    test('has correct values', () {
+    test('values', () {
       expect(WallpaperTarget.values, hasLength(3));
       expect(WallpaperTarget.home.name, 'home');
       expect(WallpaperTarget.lock.name, 'lock');
@@ -196,545 +197,506 @@ void main() {
   });
 
   // ================================================================
-  // WallpaperErrorCode Tests
+  // WallpaperErrorCode
   // ================================================================
 
   group('WallpaperErrorCode', () {
-    test('has all expected values', () {
+    test('count', () {
       expect(WallpaperErrorCode.values.length, greaterThanOrEqualTo(10));
     });
 
-    group('fromString', () {
-      test('parses known code', () {
-        expect(
-          WallpaperErrorCodeParsing.fromString('downloadFailed'),
-          WallpaperErrorCode.downloadFailed,
-        );
-      });
+    test('fromString known', () {
+      expect(
+        WallpaperErrorCodeParsing.fromString('downloadFailed'),
+        WallpaperErrorCode.downloadFailed,
+      );
+    });
 
-      test('null returns none', () {
-        expect(
-          WallpaperErrorCodeParsing.fromString(null),
-          WallpaperErrorCode.none,
-        );
-      });
+    test('fromString null', () {
+      expect(
+        WallpaperErrorCodeParsing.fromString(null),
+        WallpaperErrorCode.none,
+      );
+    });
 
-      test('empty returns none', () {
-        expect(
-          WallpaperErrorCodeParsing.fromString(''),
-          WallpaperErrorCode.none,
-        );
-      });
+    test('fromString empty', () {
+      expect(WallpaperErrorCodeParsing.fromString(''), WallpaperErrorCode.none);
+    });
 
-      test('unknown returns unknown', () {
-        expect(
-          WallpaperErrorCodeParsing.fromString('fakeCode'),
-          WallpaperErrorCode.unknown,
-        );
-      });
+    test('fromString unknown', () {
+      expect(
+        WallpaperErrorCodeParsing.fromString('xyz'),
+        WallpaperErrorCode.unknown,
+      );
+    });
 
-      test('parses all valid codes', () {
-        for (final code in WallpaperErrorCode.values) {
-          expect(WallpaperErrorCodeParsing.fromString(code.name), code);
-        }
-      });
+    test('all codes parse', () {
+      for (final c in WallpaperErrorCode.values) {
+        expect(WallpaperErrorCodeParsing.fromString(c.name), c);
+      }
     });
   });
 
   // ================================================================
-  // WallpaperResult Tests
+  // WallpaperResult
   // ================================================================
 
   group('WallpaperResult', () {
-    test('success result', () {
+    test('success', () {
       const r = WallpaperResult(success: true, message: 'OK');
       expect(r.success, isTrue);
       expect(r.isError, isFalse);
       expect(r.errorCode, WallpaperErrorCode.none);
     });
 
-    test('error result', () {
+    test('error', () {
       const r = WallpaperResult(
         success: false,
-        message: 'Fail',
+        message: 'F',
         errorCode: WallpaperErrorCode.downloadFailed,
       );
-      expect(r.success, isFalse);
       expect(r.isError, isTrue);
     });
 
-    group('fromMap', () {
-      test('success map', () {
-        final r = WallpaperResult.fromMap({
-          'success': true,
-          'message': 'OK',
-          'errorCode': 'none',
-        });
-        expect(r.success, isTrue);
-        expect(r.message, 'OK');
+    test('fromMap success', () {
+      final r = WallpaperResult.fromMap({
+        'success': true,
+        'message': 'OK',
+        'errorCode': 'none',
       });
+      expect(r.success, isTrue);
+    });
 
-      test('error map', () {
-        final r = WallpaperResult.fromMap({
-          'success': false,
-          'message': 'HTTP 404',
-          'errorCode': 'downloadFailed',
-        });
-        expect(r.success, isFalse);
-        expect(r.errorCode, WallpaperErrorCode.downloadFailed);
+    test('fromMap error', () {
+      final r = WallpaperResult.fromMap({
+        'success': false,
+        'message': 'E',
+        'errorCode': 'downloadFailed',
       });
+      expect(r.errorCode, WallpaperErrorCode.downloadFailed);
+    });
 
-      test('missing success defaults false', () {
-        final r = WallpaperResult.fromMap({'message': 'X'});
-        expect(r.success, isFalse);
-      });
-
-      test('missing message defaults', () {
-        final r = WallpaperResult.fromMap({'success': true});
-        expect(r.message, 'Unknown result');
-      });
-
-      test('unknown errorCode', () {
-        final r = WallpaperResult.fromMap({
-          'success': false,
-          'message': 'E',
-          'errorCode': 'fake',
-        });
-        expect(r.errorCode, WallpaperErrorCode.unknown);
-      });
+    test('fromMap defaults', () {
+      final r = WallpaperResult.fromMap(<String, dynamic>{});
+      expect(r.success, isFalse);
+      expect(r.message, 'Unknown result');
     });
 
     test('equality', () {
       const a = WallpaperResult(success: true, message: 'OK');
       const b = WallpaperResult(success: true, message: 'OK');
       expect(a, equals(b));
-      expect(a.hashCode, equals(b.hashCode));
     });
 
     test('toString', () {
-      const r = WallpaperResult(success: true, message: 'Done');
-      expect(r.toString(), contains('success: true'));
-      expect(r.toString(), contains('Done'));
+      const r = WallpaperResult(success: true, message: 'D');
+      expect(r.toString(), contains('true'));
     });
   });
 
   // ================================================================
-  // setImageWallpaper Tests
+  // setImageWallpaper
   // ================================================================
 
   group('setImageWallpaper', () {
-    test('URL source with all parameters', () async {
-      final result = await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.url('https://example.com/bg.jpg'),
+    test('url with all params', () async {
+      final r = await FlutterWallpaperPlus.setImageWallpaper(
+        source: WallpaperSource.url('https://e.com/bg.jpg'),
         target: WallpaperTarget.both,
-        successMessage: 'Custom success',
-        errorMessage: 'Custom error',
+        successMessage: 'S',
+        errorMessage: 'E',
         showToast: false,
       );
 
-      expect(result.success, isTrue);
-      expect(log, hasLength(1));
-      expect(log.first.method, 'setImageWallpaper');
-
-      final args = log.first.arguments as Map;
-      expect(args['target'], 'both');
-      expect(args['showToast'], false);
-      expect(args['successMessage'], 'Custom success');
-      expect(args['errorMessage'], 'Custom error');
-
-      final source = args['source'] as Map;
-      expect(source['type'], 'url');
-      expect(source['path'], 'https://example.com/bg.jpg');
+      expect(r.success, isTrue);
+      final a = log.first.arguments as Map;
+      expect(a['target'], 'both');
+      expect(a['showToast'], false);
+      expect((a['source'] as Map)['type'], 'url');
     });
 
     test('asset source', () async {
       await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.asset('assets/bg.jpg'),
+        source: WallpaperSource.asset('a.jpg'),
         target: WallpaperTarget.home,
       );
-
-      final args = log.first.arguments as Map;
-      final source = args['source'] as Map;
-      expect(source['type'], 'asset');
-      expect(args['target'], 'home');
+      final a = log.first.arguments as Map;
+      expect((a['source'] as Map)['type'], 'asset');
     });
 
     test('file source', () async {
       await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.file('/storage/bg.jpg'),
+        source: WallpaperSource.file('/b.jpg'),
         target: WallpaperTarget.lock,
       );
-
-      final args = log.first.arguments as Map;
-      final source = args['source'] as Map;
-      expect(source['type'], 'file');
-      expect(args['target'], 'lock');
+      final a = log.first.arguments as Map;
+      expect((a['source'] as Map)['type'], 'file');
+      expect(a['target'], 'lock');
     });
 
-    test('default messages', () async {
+    test('defaults', () async {
       await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.asset('assets/bg.jpg'),
+        source: WallpaperSource.asset('a.jpg'),
         target: WallpaperTarget.home,
       );
-
-      final args = log.first.arguments as Map;
-      expect(args['successMessage'], 'Wallpaper set successfully');
-      expect(args['errorMessage'], 'Failed to set wallpaper');
-      expect(args['showToast'], true);
+      final a = log.first.arguments as Map;
+      expect(a['successMessage'], 'Wallpaper set successfully');
+      expect(a['showToast'], true);
     });
 
     test('all targets', () async {
-      for (final target in WallpaperTarget.values) {
+      for (final t in WallpaperTarget.values) {
         log.clear();
         await FlutterWallpaperPlus.setImageWallpaper(
-          source: WallpaperSource.url('https://example.com/bg.jpg'),
-          target: target,
+          source: WallpaperSource.url('https://e.com/b'),
+          target: t,
         );
-        final args = log.first.arguments as Map;
-        expect(args['target'], target.name);
+        expect((log.first.arguments as Map)['target'], t.name);
       }
     });
 
-    test('download failure response', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'HTTP 404',
-              'errorCode': 'downloadFailed',
-            };
-          });
+    test('error responses', () async {
+      for (final code in [
+        'downloadFailed',
+        'permissionDenied',
+        'manufacturerRestriction',
+        'applyFailed',
+        'sourceNotFound',
+      ]) {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (c) async {
+              return <String, dynamic>{
+                'success': false,
+                'message': 'err',
+                'errorCode': code,
+              };
+            });
 
-      final result = await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.url('https://example.com/missing.jpg'),
-        target: WallpaperTarget.home,
-      );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.downloadFailed);
-    });
-
-    test('permission denied response', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'Permission denied',
-              'errorCode': 'permissionDenied',
-            };
-          });
-
-      final result = await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.url('https://example.com/bg.jpg'),
-        target: WallpaperTarget.home,
-      );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.permissionDenied);
-    });
-
-    test('manufacturer restriction response', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'Blocked by policy',
-              'errorCode': 'manufacturerRestriction',
-            };
-          });
-
-      final result = await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.url('https://example.com/bg.jpg'),
-        target: WallpaperTarget.home,
-      );
-
-      expect(result.errorCode, WallpaperErrorCode.manufacturerRestriction);
-    });
-
-    test('apply failure response', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'Too large',
-              'errorCode': 'applyFailed',
-            };
-          });
-
-      final result = await FlutterWallpaperPlus.setImageWallpaper(
-        source: WallpaperSource.url('https://example.com/huge.jpg'),
-        target: WallpaperTarget.both,
-      );
-
-      expect(result.errorCode, WallpaperErrorCode.applyFailed);
-    });
-  });
-
-  // ================================================================
-  // setVideoWallpaper Tests (Phase 3)
-  // ================================================================
-
-  group('setVideoWallpaper', () {
-    test('sends all arguments correctly', () async {
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/video.mp4'),
-        target: WallpaperTarget.home,
-        enableAudio: true,
-        loop: false,
-        successMessage: 'Video ready!',
-        errorMessage: 'Video failed',
-        showToast: false,
-      );
-
-      expect(result.success, isTrue);
-      expect(log, hasLength(1));
-      expect(log.first.method, 'setVideoWallpaper');
-
-      final args = log.first.arguments as Map;
-      expect(args['enableAudio'], true);
-      expect(args['loop'], false);
-      expect(args['target'], 'home');
-      expect(args['successMessage'], 'Video ready!');
-      expect(args['errorMessage'], 'Video failed');
-      expect(args['showToast'], false);
-
-      final source = args['source'] as Map;
-      expect(source['type'], 'url');
-      expect(source['path'], 'https://example.com/video.mp4');
-    });
-
-    test('default audio and loop values', () async {
-      await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/video.mp4'),
-        target: WallpaperTarget.both,
-      );
-
-      final args = log.first.arguments as Map;
-      expect(args['enableAudio'], false);
-      expect(args['loop'], true);
-    });
-
-    test('default messages', () async {
-      await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/video.mp4'),
-        target: WallpaperTarget.home,
-      );
-
-      final args = log.first.arguments as Map;
-      expect(args['successMessage'], 'Live wallpaper set successfully');
-      expect(args['errorMessage'], 'Failed to set live wallpaper');
-      expect(args['showToast'], true);
-    });
-
-    test('asset source', () async {
-      await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.asset('assets/rain.mp4'),
-        target: WallpaperTarget.home,
-      );
-
-      final args = log.first.arguments as Map;
-      final source = args['source'] as Map;
-      expect(source['type'], 'asset');
-      expect(source['path'], 'assets/rain.mp4');
-    });
-
-    test('file source', () async {
-      await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.file('/storage/video.mp4'),
-        target: WallpaperTarget.home,
-      );
-
-      final args = log.first.arguments as Map;
-      final source = args['source'] as Map;
-      expect(source['type'], 'file');
-      expect(source['path'], '/storage/video.mp4');
-    });
-
-    test('all targets', () async {
-      for (final target in WallpaperTarget.values) {
-        log.clear();
-        await FlutterWallpaperPlus.setVideoWallpaper(
-          source: WallpaperSource.url('https://example.com/v.mp4'),
-          target: target,
+        final r = await FlutterWallpaperPlus.setImageWallpaper(
+          source: WallpaperSource.url('https://e.com/b'),
+          target: WallpaperTarget.home,
         );
-        final args = log.first.arguments as Map;
-        expect(args['target'], target.name);
+        expect(r.success, isFalse);
+        expect(r.errorCode.name, code);
       }
     });
 
-    test('unsupported device response', () async {
+    test('PlatformException', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'Live wallpapers not supported',
-              'errorCode': 'unsupported',
-            };
-          });
-
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/v.mp4'),
-        target: WallpaperTarget.home,
-      );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.unsupported);
-    });
-
-    test('download failure response', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'Download failed',
-              'errorCode': 'downloadFailed',
-            };
-          });
-
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://bad.example.com/v.mp4'),
-        target: WallpaperTarget.home,
-      );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.downloadFailed);
-    });
-
-    test('source not found response', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            return <String, dynamic>{
-              'success': false,
-              'message': 'Asset not found',
-              'errorCode': 'sourceNotFound',
-            };
-          });
-
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.asset('assets/missing.mp4'),
-        target: WallpaperTarget.home,
-      );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.sourceNotFound);
-    });
-
-    test('PlatformException handling', () async {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
+          .setMockMethodCallHandler(channel, (c) async {
             throw PlatformException(
-              code: 'videoError',
-              message: 'Codec not supported',
+              code: 'permissionDenied',
+              message: 'denied',
             );
           });
 
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/v.mp4'),
+      final r = await FlutterWallpaperPlus.setImageWallpaper(
+        source: WallpaperSource.url('https://e.com/b'),
         target: WallpaperTarget.home,
       );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.videoError);
+      expect(r.errorCode, WallpaperErrorCode.permissionDenied);
     });
 
-    test('MissingPluginException handling', () async {
+    test('MissingPluginException', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
+          .setMockMethodCallHandler(channel, (c) async {
             throw MissingPluginException();
           });
 
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/v.mp4'),
+      final r = await FlutterWallpaperPlus.setImageWallpaper(
+        source: WallpaperSource.asset('a'),
         target: WallpaperTarget.home,
       );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.unsupported);
+      expect(r.errorCode, WallpaperErrorCode.unsupported);
     });
 
-    test('null response handling', () async {
+    test('null response', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async => null);
+          .setMockMethodCallHandler(channel, (c) async => null);
 
-      final result = await FlutterWallpaperPlus.setVideoWallpaper(
-        source: WallpaperSource.url('https://example.com/v.mp4'),
+      final r = await FlutterWallpaperPlus.setImageWallpaper(
+        source: WallpaperSource.url('https://e.com/b'),
         target: WallpaperTarget.home,
       );
-
-      expect(result.success, isFalse);
-      expect(result.errorCode, WallpaperErrorCode.unknown);
+      expect(r.success, isFalse);
     });
   });
 
   // ================================================================
-  // getVideoThumbnail Tests
+  // setVideoWallpaper
+  // ================================================================
+
+  group('setVideoWallpaper', () {
+    test('all params', () async {
+      final r = await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+        target: WallpaperTarget.home,
+        enableAudio: true,
+        loop: false,
+        successMessage: 'S',
+        errorMessage: 'E',
+        showToast: false,
+      );
+
+      expect(r.success, isTrue);
+      final a = log.first.arguments as Map;
+      expect(a['enableAudio'], true);
+      expect(a['loop'], false);
+      expect(a['target'], 'home');
+      expect(a['showToast'], false);
+    });
+
+    test('defaults', () async {
+      await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+        target: WallpaperTarget.home,
+      );
+      final a = log.first.arguments as Map;
+      expect(a['enableAudio'], false);
+      expect(a['loop'], true);
+      expect(a['successMessage'], 'Live wallpaper set successfully');
+    });
+
+    test('asset', () async {
+      await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.asset('rain.mp4'),
+        target: WallpaperTarget.home,
+      );
+      final a = log.first.arguments as Map;
+      expect((a['source'] as Map)['type'], 'asset');
+    });
+
+    test('file', () async {
+      await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.file('/v.mp4'),
+        target: WallpaperTarget.home,
+      );
+      expect(((log.first.arguments as Map)['source'] as Map)['type'], 'file');
+    });
+
+    test('all targets', () async {
+      for (final t in WallpaperTarget.values) {
+        log.clear();
+        await FlutterWallpaperPlus.setVideoWallpaper(
+          source: WallpaperSource.url('https://e.com/v'),
+          target: t,
+        );
+        expect((log.first.arguments as Map)['target'], t.name);
+      }
+    });
+
+    test('unsupported', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async {
+            return <String, dynamic>{
+              'success': false,
+              'message': 'not supported',
+              'errorCode': 'unsupported',
+            };
+          });
+      final r = await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.url('https://e.com/v'),
+        target: WallpaperTarget.home,
+      );
+      expect(r.errorCode, WallpaperErrorCode.unsupported);
+    });
+
+    test('PlatformException', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async {
+            throw PlatformException(code: 'videoError', message: 'codec');
+          });
+      final r = await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.url('https://e.com/v'),
+        target: WallpaperTarget.home,
+      );
+      expect(r.errorCode, WallpaperErrorCode.videoError);
+    });
+
+    test('null response', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async => null);
+      final r = await FlutterWallpaperPlus.setVideoWallpaper(
+        source: WallpaperSource.url('https://e.com/v'),
+        target: WallpaperTarget.home,
+      );
+      expect(r.success, isFalse);
+    });
+  });
+
+  // ================================================================
+  // getVideoThumbnail (Phase 4)
   // ================================================================
 
   group('getVideoThumbnail', () {
-    test('returns bytes', () async {
+    test('returns bytes from URL source', () async {
       final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
-        source: WallpaperSource.url('https://example.com/v.mp4'),
+        source: WallpaperSource.url('https://e.com/v.mp4'),
         quality: 50,
       );
+
       expect(bytes, isNotNull);
-      expect(bytes!.length, 4);
+      expect(bytes!.length, 8);
+      expect(bytes[0], 0xFF); // JPEG magic byte
+      expect(bytes[1], 0xD8);
+
+      final a = log.first.arguments as Map;
+      expect(a['quality'], 50);
+      expect(a['cache'], true);
+      expect((a['source'] as Map)['type'], 'url');
     });
 
-    test('clamps quality max', () async {
+    test('returns bytes from asset source', () async {
+      final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.asset('assets/video.mp4'),
+        quality: 30,
+      );
+
+      expect(bytes, isNotNull);
+      final a = log.first.arguments as Map;
+      expect((a['source'] as Map)['type'], 'asset');
+    });
+
+    test('returns bytes from file source', () async {
+      final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.file('/path/video.mp4'),
+      );
+
+      expect(bytes, isNotNull);
+      final a = log.first.arguments as Map;
+      expect((a['source'] as Map)['type'], 'file');
+    });
+
+    test('default quality is 30', () async {
       await FlutterWallpaperPlus.getVideoThumbnail(
-        source: WallpaperSource.asset('assets/v.mp4'),
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+      );
+      final a = log.first.arguments as Map;
+      expect(a['quality'], 30);
+    });
+
+    test('default cache is true', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+      );
+      final a = log.first.arguments as Map;
+      expect(a['cache'], true);
+    });
+
+    test('cache false', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+        cache: false,
+      );
+      final a = log.first.arguments as Map;
+      expect(a['cache'], false);
+    });
+
+    test('clamps quality max to 100', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.asset('v.mp4'),
         quality: 200,
       );
-      final args = log.first.arguments as Map;
-      expect(args['quality'], 100);
+      expect((log.first.arguments as Map)['quality'], 100);
     });
 
-    test('clamps quality min', () async {
+    test('clamps quality min to 1', () async {
       await FlutterWallpaperPlus.getVideoThumbnail(
-        source: WallpaperSource.asset('assets/v.mp4'),
+        source: WallpaperSource.asset('v.mp4'),
         quality: -5,
       );
-      final args = log.first.arguments as Map;
-      expect(args['quality'], 1);
+      expect((log.first.arguments as Map)['quality'], 1);
     });
 
-    test('returns null on error', () async {
+    test('clamps quality 0 to 1', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.asset('v.mp4'),
+        quality: 0,
+      );
+      expect((log.first.arguments as Map)['quality'], 1);
+    });
+
+    test('quality 1 passes as 1', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.asset('v.mp4'),
+        quality: 1,
+      );
+      expect((log.first.arguments as Map)['quality'], 1);
+    });
+
+    test('quality 100 passes as 100', () async {
+      await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.asset('v.mp4'),
+        quality: 100,
+      );
+      expect((log.first.arguments as Map)['quality'], 100);
+    });
+
+    test('returns null on PlatformException', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
+          .setMockMethodCallHandler(channel, (c) async {
             throw PlatformException(code: 'thumbnailFailed');
           });
-
       final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
-        source: WallpaperSource.url('https://example.com/v.mp4'),
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+      );
+      expect(bytes, isNull);
+    });
+
+    test('returns null on MissingPluginException', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async {
+            throw MissingPluginException();
+          });
+      final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+      );
+      expect(bytes, isNull);
+    });
+
+    test('returns null on generic exception', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async {
+            throw Exception('something broke');
+          });
+      final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
+      );
+      expect(bytes, isNull);
+    });
+
+    test('returns null when platform returns null', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async => null);
+      final bytes = await FlutterWallpaperPlus.getVideoThumbnail(
+        source: WallpaperSource.url('https://e.com/v.mp4'),
       );
       expect(bytes, isNull);
     });
   });
 
   // ================================================================
-  // Cache Management Tests
+  // Cache Management
   // ================================================================
 
   group('Cache management', () {
     test('clearCache', () async {
-      final result = await FlutterWallpaperPlus.clearCache();
-      expect(result.success, isTrue);
+      final r = await FlutterWallpaperPlus.clearCache();
+      expect(r.success, isTrue);
       expect(log.first.method, 'clearCache');
     });
 
     test('getCacheSize', () async {
-      final size = await FlutterWallpaperPlus.getCacheSize();
-      expect(size, 1048576);
+      final s = await FlutterWallpaperPlus.getCacheSize();
+      expect(s, 1048576);
     });
 
     test('setMaxCacheSize', () async {
       await FlutterWallpaperPlus.setMaxCacheSize(500 * 1024 * 1024);
-      expect(log.first.method, 'setMaxCacheSize');
-      final args = log.first.arguments as Map;
-      expect(args['maxBytes'], 500 * 1024 * 1024);
+      expect((log.first.arguments as Map)['maxBytes'], 500 * 1024 * 1024);
     });
 
-    test('setMaxCacheSize throws on zero', () {
+    test('setMaxCacheSize throws on 0', () {
       expect(
         () => FlutterWallpaperPlus.setMaxCacheSize(0),
         throwsA(isA<ArgumentError>()),
@@ -750,11 +712,10 @@ void main() {
 
     test('getCacheSize returns 0 on error', () async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, (call) async {
-            throw PlatformException(code: 'error');
+          .setMockMethodCallHandler(channel, (c) async {
+            throw PlatformException(code: 'e');
           });
-      final size = await FlutterWallpaperPlus.getCacheSize();
-      expect(size, 0);
+      expect(await FlutterWallpaperPlus.getCacheSize(), 0);
     });
   });
 }

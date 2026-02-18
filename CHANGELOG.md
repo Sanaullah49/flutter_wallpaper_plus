@@ -1,41 +1,39 @@
 # Changelog
 
+## 1.0.0-dev.4
+
+### Phase 4 — Thumbnail Generation
+- `ThumbnailGenerator` using MediaMetadataRetriever
+- Frame extraction at 1 second with 3-level fallback strategy
+- Proportional scaling to max 480px dimension
+- JPEG compression with configurable quality (1-100)
+- Thumbnail caching via CacheManager (read and write)
+- Full `handleGetVideoThumbnail` in WallpaperMethodHandler
+- Supports all source types: asset, file, URL
+- Handles corrupt files, unsupported codecs, OOM gracefully
+- Explicit Bitmap recycling for memory efficiency
+- 90+ unit tests covering quality clamping, cache flag, error cases
+- Example app with thumbnail preview, quality comparison, cache test
+
 ## 1.0.0-dev.3
 
 ### Phase 3 — Video (Live) Wallpaper
-- `VideoRenderer` — ExoPlayer lifecycle wrapper with play/pause/release
-- `VideoWallpaperService` — Android WallpaperService with inner Engine
-- Survives app kill via SharedPreferences config persistence
-- Handles screen rotation via onSurfaceChanged
-- Pauses when not visible, resumes when home screen shown (battery saving)
-- Audio enable/disable at runtime via volume control
-- Seamless looping via Player.REPEAT_MODE_ALL
-- Player error recovery (seek to start + re-prepare)
-- Touch events pass through to launcher
-- Two-strategy intent launching (direct component → fallback picker)
-- Source resolution: asset/file/URL with caching
-- Full error handling: unsupported device, download failure, source not found
-- 80+ unit tests covering all video wallpaper scenarios
-- Example app with 4 video wallpaper demo buttons
+- `VideoRenderer` — ExoPlayer lifecycle wrapper
+- `VideoWallpaperService` — WallpaperService with inner Engine
+- Survives app kill, handles rotation, visibility-based pause/resume
+- Audio toggle, seamless loop, error recovery
+- Two-strategy intent launch (direct + fallback)
+- 80+ unit tests
 
 ## 1.0.0-dev.2
 
 ### Phase 2 — Image Wallpaper
 - `ImageWallpaperManager` with WallpaperManager.setStream()
-- Memory-efficient streaming (no full bitmap in memory)
-- Pre-flight checks: isWallpaperSupported, isSetWallpaperAllowed
-- FLAG_SYSTEM / FLAG_LOCK / both support
-- Storage permission check for external files
-- App-internal path detection
-- Catches SecurityException, IOException, OutOfMemoryError
-- Optional Toast with custom messages
+- FLAG_SYSTEM / FLAG_LOCK / both, pre-flight checks
 - 70+ unit tests
 
 ## 1.0.0-dev.1
 
 ### Phase 1 — Foundation
-- Dart public API with structured error handling
-- CacheManager with SHA-256 hashing, LRU eviction, OkHttp downloads
-- SourceResolver for asset/file/URL resolution
-- PermissionHelper for cross-API-level permission checks
+- Dart API, CacheManager, SourceResolver, PermissionHelper
 - 55+ unit tests
