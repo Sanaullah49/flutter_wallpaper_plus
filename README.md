@@ -47,7 +47,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  flutter_wallpaper_plus: ^1.0.0
+  flutter_wallpaper_plus: ^1.0.1
 ```
 
 Install dependencies:
@@ -118,6 +118,7 @@ Notes:
 - Android opens the **system live wallpaper chooser** and user confirmation is required.
 - `WallpaperTarget.lock` is not supported for live video wallpaper (`WallpaperErrorCode.unsupported`).
 - Live wallpaper service runs independently after apply (survives app process death).
+- Selected live wallpaper video is persisted in app-internal storage so it remains available even after cache cleanup.
 
 ### Open Native Wallpaper Chooser
 

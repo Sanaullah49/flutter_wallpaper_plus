@@ -44,6 +44,8 @@ class WallpaperMethodHandler(
 
     companion object {
         private const val TAG = "WallpaperMethodHandler"
+        private const val LIVE_VIDEO_DIR_NAME = "wallpaper_plus_live"
+        private const val ACTIVE_LIVE_VIDEO_BASENAME = "active_live_video"
     }
 
     private val scope = CoroutineScope(
@@ -380,16 +382,21 @@ class WallpaperMethodHandler(
                             + "${SystemClock.elapsedRealtime() - resolveStarted}ms"
                 )
 
-                val prefs = context.getSharedPreferences(
-                    VideoWallpaperService.PREFS_NAME,
-                    Context.MODE_PRIVATE
-                )
+                val persistedVideoFile = try {
+                    persistVideoForWallpaperService(file)
+                } catch (e: Exception) {
+                    outcome = "video_prepare_failed"
+                    Log.e(TAG, "Failed to persist live wallpaper video", e)
+                    val payload = ResultPayload.error(
+                        "Failed to prepare video for live wallpaper: ${e.message}",
+                        "applyFailed"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
 
-                val saved = prefs.edit()
-                    .putString(VideoWallpaperService.KEY_VIDEO_PATH, file.absolutePath)
-                    .putBoolean(VideoWallpaperService.KEY_ENABLE_AUDIO, config.enableAudio)
-                    .putBoolean(VideoWallpaperService.KEY_LOOP, config.loop)
-                    .commit()
+                val saved = saveVideoWallpaperConfig(persistedVideoFile, config)
 
                 if (!saved) {
                     outcome = "prefs_save_failed"
@@ -533,7 +540,29 @@ class WallpaperMethodHandler(
                             "unsupported"
                         )
                     } else {
-                        val saved = saveVideoWallpaperConfig(file, config)
+                        val persistedVideoFile = try {
+                            persistVideoForWallpaperService(file)
+                        } catch (e: Exception) {
+                            outcome = "video_prepare_failed"
+                            Log.e(
+                                TAG,
+                                "Failed to persist video for chooser flow",
+                                e
+                            )
+                            showToastIfNeeded(config.showToast, config.errorMessage)
+                            result.success(
+                                ResultPayload.error(
+                                    "Failed to prepare video for live wallpaper: ${e.message}",
+                                    "applyFailed"
+                                ).toMap()
+                            )
+                            return@launch
+                        }
+
+                        val saved = saveVideoWallpaperConfig(
+                            persistedVideoFile,
+                            config
+                        )
                         if (!saved) {
                             ResultPayload.error(
                                 "Failed to save wallpaper configuration",
@@ -1026,6 +1055,68 @@ class WallpaperMethodHandler(
             .putBoolean(VideoWallpaperService.KEY_LOOP, config.loop)
             .commit()
     }
+
+    private suspend fun persistVideoForWallpaperService(sourceFile: File): File =
+        withContext(Dispatchers.IO) {
+            val destinationDir = File(context.filesDir, LIVE_VIDEO_DIR_NAME)
+            if (!destinationDir.exists() && !destinationDir.mkdirs()) {
+                throw IllegalStateException(
+                    "Could not create live wallpaper storage directory."
+                )
+            }
+
+            val extension = sourceFile.extension
+                .takeIf { it.isNotBlank() }
+                ?.lowercase(Locale.US)
+                ?: "mp4"
+
+            val destinationFile = File(
+                destinationDir,
+                "$ACTIVE_LIVE_VIDEO_BASENAME.$extension"
+            )
+
+            if (sourceFile.absolutePath != destinationFile.absolutePath) {
+                val tempFile = File(
+                    destinationDir,
+                    "$ACTIVE_LIVE_VIDEO_BASENAME.tmp"
+                )
+
+                sourceFile.inputStream().use { input ->
+                    tempFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+
+                if (!tempFile.exists() || tempFile.length() == 0L) {
+                    tempFile.delete()
+                    throw IllegalStateException(
+                        "Prepared live wallpaper file is empty."
+                    )
+                }
+
+                if (!tempFile.renameTo(destinationFile)) {
+                    tempFile.copyTo(destinationFile, overwrite = true)
+                    tempFile.delete()
+                }
+            }
+
+            destinationDir.listFiles()
+                ?.filter {
+                    it.name.startsWith("$ACTIVE_LIVE_VIDEO_BASENAME.") &&
+                            it.absolutePath != destinationFile.absolutePath
+                }
+                ?.forEach { staleFile ->
+                    if (!staleFile.delete()) {
+                        Log.w(
+                            TAG,
+                            "Failed to delete stale live wallpaper file: "
+                                    + staleFile.absolutePath
+                        )
+                    }
+                }
+
+            destinationFile
+        }
 
     private fun isVideoSource(sourcePath: String, file: File): Boolean {
         val mimeFromSource = guessMimeType(sourcePath)
