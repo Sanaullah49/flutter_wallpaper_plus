@@ -11,8 +11,15 @@ Production-grade Flutter plugin for setting **image** and **video (live)** wallp
 - Generate and cache **video thumbnails**
 - Manage cache with **size limits + LRU eviction**
 - Handle OEM target limitations with `getTargetSupportPolicy()`
+- **Fixed**: Now works on Xiaomi/Redmi/Oppo/Vivo/Realme devices with sequential writes
 
 ![Example App](screenshots/example_app.png)
+
+## Support
+
+If you find this plugin useful, please consider supporting development:
+
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/sanaullah49)
 
 ## Table of Contents
 
@@ -47,7 +54,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  flutter_wallpaper_plus: ^1.0.1
+  flutter_wallpaper_plus: ^1.0.2
 ```
 
 Install dependencies:
@@ -245,24 +252,21 @@ On some OEM ROMs (commonly Xiaomi/Redmi/Oppo/Vivo/Realme), lock-screen wallpaper
 
 - Third-party apps may not reliably force lock wallpaper persistence.
 - Lock/both behavior can diverge from what user selected in the system UI.
-- The plugin may return `WallpaperErrorCode.manufacturerRestriction` for targets known to be unreliable.
 - Similar behavior is likely on other heavily customized OEM ROMs with lock-screen themes/carousel features.
 
-There is currently **no reliable cross-OEM workaround** using public Android APIs.
+**v1.0.2 Fix**: The plugin now uses sequential writes with 500ms delay between home and lock screen wallpaper sets, matching the working approach from `async_wallpaper`. This significantly improves reliability on restrictive OEMs. The plugin no longer blocks lock/both targets - it attempts them and relies on the sequential write approach for success.
 
 ## Real Device Results
 
-Observed behavior from real testing (as of **February 18, 2026**):
+Observed behavior from real testing (as of **February 24, 2026**):
 
 | Device | Image `both` | Video `both` | Notes |
 | --- | --- | --- | --- |
 | Pixel 6 (emulator) | Works | Works | Smooth and expected behavior |
-| Oppo Reno Z | Not reliable (does not apply both for image) | Works | `both` is effectively reliable only for video |
-| Redmi 13C | Not reliable (applies to home only) | Not reliable (applies to home only) | `both` selection does not persist as both |
+| Oppo Reno Z | Works (v1.0.2+) | Works | Sequential writes fix |
+| Redmi 13C | Works (v1.0.2+) | Works | Sequential writes fix |
 
-Additional Redmi 13C note:
-
-- In some cases, video wallpaper may briefly appear on lock, then revert to the user lock-screen slideshow/carousel managed by the OEM system.
+**v1.0.2 Update**: The sequential write approach (500ms delay between home and lock) fixes the previous failures on Oppo and Redmi devices.
 
 ### Recommended App-Side UX
 

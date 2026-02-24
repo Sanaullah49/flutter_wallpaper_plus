@@ -138,7 +138,9 @@ class WallpaperMethodHandler(
                     return@launch
                 }
 
-                if (OemPolicy.isRestrictiveOem() &&
+                // OEM restriction check removed - async_wallpaper uses sequential writes
+                // and works on these devices, so we should too
+                /*if (OemPolicy.isRestrictiveOem() &&
                     (config.target == "lock" || config.target == "both")
                 ) {
                     outcome = "restricted_target"
@@ -150,7 +152,7 @@ class WallpaperMethodHandler(
                     showToastIfNeeded(config.showToast, payload.message)
                     result.success(payload.toMap())
                     return@launch
-                }
+                }*/
 
                 if (!PermissionHelper.hasWallpaperPermission(context)) {
                     outcome = "permission_denied"

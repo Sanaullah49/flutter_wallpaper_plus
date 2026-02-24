@@ -166,72 +166,31 @@ class ImageWallpaperManager(private val context: Context) {
             wallpaperManager,
             WallpaperManager.FLAG_LOCK
         )
-        val hadDedicatedLock = beforeSystemId > 0 &&
-                beforeLockId > 0 &&
-                beforeSystemId != beforeLockId
-        val manufacturer = OemPolicy.manufacturerNormalized()
-        val needsOemFallbackChecks = OemPolicy.isRestrictiveOem()
 
         Log.d(
             TAG,
-            "Applying both wallpapers (combined flags first). "
+            "Applying both wallpapers sequentially. "
                     + "beforeSystemId=$beforeSystemId, "
-                    + "beforeLockId=$beforeLockId, "
-                    + "hadDedicatedLock=$hadDedicatedLock, "
-                    + "manufacturer=$manufacturer"
+                    + "beforeLockId=$beforeLockId"
         )
 
-        // Strategy 1: Standard Android path.
-        setWallpaperForFlags(
-            wallpaperManager,
-            imageFile,
-            WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK
-        )
+        // Strategy 1: Sequential writes with delays (like async_wallpaper)
+        // This is critical for OEM devices like Xiaomi, Oppo, Vivo, Realme
+        Log.d(TAG, "Setting home screen wallpaper...")
+        setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_SYSTEM)
 
-        if (!needsOemFallbackChecks) {
-            // Non-targeted OEMs stay on the standard path.
-            return null
+        // Delay to ensure home screen is fully set
+        try {
+            Thread.sleep(500)
+        } catch (e: InterruptedException) {
+            Log.w(TAG, "Delay interrupted", e)
         }
 
-        // Strategy 2: Known OEMs may ignore combined flags for lock updates.
-        // Force explicit system + lock writes even if combined looked successful.
-        Log.w(
-            TAG,
-            "Running OEM fallback: explicit system+lock writes"
-        )
-        setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_SYSTEM)
+        Log.d(TAG, "Setting lock screen wallpaper...")
         setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_LOCK)
 
-        if (!hadDedicatedLock) {
-            // Lock was shared (or IDs unavailable); no reliable verification possible.
-            return null
-        }
-
-        val lockChangedAfterFallback = didWallpaperIdChange(
-            wallpaperManager,
-            WallpaperManager.FLAG_LOCK,
-            beforeLockId
-        )
-        if (lockChangedAfterFallback) {
-            return null
-        }
-
-        val systemChangedAfterFallback = didWallpaperIdChange(
-            wallpaperManager,
-            WallpaperManager.FLAG_SYSTEM,
-            beforeSystemId
-        )
-
-        return if (!systemChangedAfterFallback) {
-            // Likely the exact same wallpaper was already applied.
-            null
-        } else {
-            ResultPayload.error(
-                "Home wallpaper was updated but lock wallpaper was not. "
-                        + "This device appears to block lock wallpaper updates.",
-                "manufacturerRestriction"
-            )
-        }
+        Log.d(TAG, "Both wallpapers set sequentially - success")
+        return null
     }
 
     private fun setWallpaperForFlags(

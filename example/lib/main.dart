@@ -426,50 +426,22 @@ class _HomePageState extends State<HomePage> {
 
           // Image Wallpaper
           _header('Image Wallpaper'),
-          if (_policy.restrictiveOem) ...[
-            const SizedBox(height: 8),
-            Card(
-              color: theme.colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'Lock and both targets are disabled on this OEM '
-                  '(${_policy.manufacturer}) to avoid false success states.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-            ),
-          ],
+          // Note: Lock/both targets now work on restrictive OEMs (Xiaomi, Oppo, Vivo, Realme)
+          // thanks to sequential writes with delays, matching async_wallpaper behavior
           const SizedBox(height: 8),
-          _btn(
-            Icons.wallpaper,
-            _policy.allowImageBoth
-                ? 'URL → Both Screens'
-                : 'URL → Both (Disabled)',
-            _policy.allowImageBoth ? _imageUrlBoth : null,
-          ),
+          _btn(Icons.wallpaper, 'URL → Both Screens', _imageUrlBoth),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(child: _btn(Icons.home_outlined, 'Home', _imageUrlHome)),
               const SizedBox(width: 8),
               Expanded(
-                child: _btn(
-                  Icons.lock_outline,
-                  _policy.allowImageLock ? 'Lock' : 'Lock (Disabled)',
-                  _policy.allowImageLock ? _imageUrlLock : null,
-                ),
+                child: _btn(Icons.lock_outline, 'Lock', _imageUrlLock),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _btn(
-            Icons.folder_outlined,
-            _policy.allowImageBoth ? 'Asset → Both' : 'Asset → Both (Disabled)',
-            _policy.allowImageBoth ? _imageAsset : null,
-          ),
+          _btn(Icons.folder_outlined, 'Asset → Both', _imageAsset),
 
           const SizedBox(height: 20),
 
@@ -489,10 +461,8 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: _btn(
                   Icons.smartphone_outlined,
-                  _policy.allowVideoBoth
-                      ? 'Silent + Loop (Both)'
-                      : 'Silent + Loop (Both Disabled)',
-                  _policy.allowVideoBoth ? _videoSilentLoopBoth : null,
+                  'Silent + Loop (Both)',
+                  _videoSilentLoopBoth,
                 ),
               ),
             ],

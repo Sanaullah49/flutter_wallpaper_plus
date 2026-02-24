@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] — 2026-02-24
+
+### Fixed
+- Image wallpaper `both` target now uses sequential writes with 500ms delay, matching the working approach from `async_wallpaper`. This fixes failure on restrictive OEMs (Xiaomi/Redmi/Oppo/Vivo/Realme) where the previous combined-flags approach was unreliable.
+- Removed OEM restriction blocking - the plugin now allows lock/both targets on all OEMs and relies on sequential writes for reliability.
+
+### Changed
+- Updated example app to enable all target buttons regardless of OEM (previously disabled on restrictive OEMs).
+
 ## [1.0.1] — 2026-02-20
 
 ### Fixed
