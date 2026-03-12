@@ -2,11 +2,8 @@ package com.flutterwallpaperplus
 
 import android.app.WallpaperManager
 import android.content.Context
-import android.graphics.Rect
 import android.os.Build
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.WindowManager
 import com.flutterwallpaperplus.models.ResultPayload
 import com.flutterwallpaperplus.models.WallpaperConfig
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +39,10 @@ class ImageWallpaperManager(private val context: Context) {
 
     companion object {
         private const val TAG = "ImageWallpaperManager"
+    }
+
+    private val imageNormalizer: ImageNormalizer by lazy {
+        ImageNormalizer(context)
     }
 
     /**
@@ -95,20 +96,30 @@ class ImageWallpaperManager(private val context: Context) {
                 return@withContext fileValidation
             }
 
+            val preparedFile = imageNormalizer.normalizeIfNeeded(
+                imageFile = imageFile,
+                target = config.target,
+            )
+
+            val preparedFileValidation = validateFile(preparedFile)
+            if (preparedFileValidation != null) {
+                return@withContext preparedFileValidation
+            }
+
             // --- Determine wallpaper flags ---
             Log.d(
                 TAG,
-                "Setting wallpaper: file=${imageFile.name}, "
-                        + "size=${imageFile.length()}, "
+                "Setting wallpaper: file=${preparedFile.name}, "
+                        + "size=${preparedFile.length()}, "
                         + "target=${config.target}"
             )
 
             // --- Apply wallpaper ---
             val applyResult = when (config.target) {
-                "both" -> setBothWithFallback(wallpaperManager, imageFile)
+                "both" -> setBothWithFallback(wallpaperManager, preparedFile)
                 else -> {
                     val flags = resolveFlags(config.target)
-                    setWallpaperForFlags(wallpaperManager, imageFile, flags)
+                    setWallpaperForFlags(wallpaperManager, preparedFile, flags)
                     null
                 }
             }

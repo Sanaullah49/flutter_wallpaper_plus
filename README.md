@@ -11,6 +11,7 @@ Production-grade Flutter plugin for setting **image** and **video (live)** wallp
 - Generate and cache **video thumbnails**
 - Manage cache with **size limits + LRU eviction**
 - Handle OEM target limitations with `getTargetSupportPolicy()`
+- Normalize oversized image sources before wallpaper apply for better stability
 - **Fixed**: Now works on Xiaomi/Redmi/Oppo/Vivo/Realme devices with sequential writes
 
 ![Example App](screenshots/example_app.png)
@@ -30,6 +31,7 @@ If you find this plugin useful, please consider supporting development:
 - [API Reference](#api-reference)
 - [Target Behavior and OEM Limitations](#target-behavior-and-oem-limitations)
 - [Real Device Results](#real-device-results)
+- [Host App Lifecycle](#host-app-lifecycle)
 - [FAQ](#faq)
 - [Architecture](#architecture)
 - [Roadmap](#roadmap)
@@ -54,7 +56,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  flutter_wallpaper_plus: ^1.0.2
+  flutter_wallpaper_plus: ^1.0.3
 ```
 
 Install dependencies:
@@ -84,6 +86,7 @@ Permission notes:
 - `SET_WALLPAPER`, `INTERNET`, and `ACCESS_NETWORK_STATE` are normal permissions (auto-granted).
 - Storage permissions are only needed for `WallpaperSource.file(...)` when reading outside app-internal storage.
 - `WallpaperSource.asset(...)` and `WallpaperSource.url(...)` do not require storage read permission.
+- Oversized image sources are normalized before apply to reduce memory pressure in the system wallpaper service.
 
 ## Quick Start
 
@@ -275,6 +278,57 @@ Observed behavior from real testing (as of **February 24, 2026**):
 - Prefer `home` target by default on restrictive OEMs.
 - Explain to users when device policy may override lock-screen wallpaper behavior.
 
+## Host App Lifecycle
+
+On some devices/ROMs, applying wallpaper can cause the host `FlutterActivity`
+to be torn down and recreated. In Logcat this may look like a "cold restart"
+or `FlutterEngine` detach/reattach cycle even when wallpaper apply itself succeeds.
+
+This is controlled by the host app lifecycle, not just by the plugin. The plugin
+cannot force your app to keep its existing `FlutterEngine`, so if you see this
+behavior, make your `MainActivity` more resilient:
+
+- Use `RenderMode.texture`
+- Reuse a cached `FlutterEngine`
+- Return `false` from `shouldDestroyEngineWithHost()`
+
+Example `MainActivity.kt`:
+
+```kotlin
+package com.example.my_app
+
+import android.content.Context
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.RenderMode
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.embedding.engine.FlutterEngineCache
+import io.flutter.embedding.engine.dart.DartExecutor
+
+class MainActivity : FlutterActivity() {
+  companion object {
+    private const val ENGINE_ID = "wallpaper_engine"
+  }
+
+  override fun getRenderMode(): RenderMode = RenderMode.texture
+
+  override fun provideFlutterEngine(context: Context): FlutterEngine {
+    FlutterEngineCache.getInstance().get(ENGINE_ID)?.let { return it }
+
+    val engine = FlutterEngine(context.applicationContext)
+    engine.dartExecutor.executeDartEntrypoint(
+      DartExecutor.DartEntrypoint.createDefault(),
+    )
+    FlutterEngineCache.getInstance().put(ENGINE_ID, engine)
+    return engine
+  }
+
+  override fun shouldDestroyEngineWithHost(): Boolean = false
+}
+```
+
+The full working example used by this package is in
+[`example/android/app/src/main/kotlin/com/example/flutter_wallpaper_plus_example/MainActivity.kt`](example/android/app/src/main/kotlin/com/example/flutter_wallpaper_plus_example/MainActivity.kt).
+
 ## FAQ
 
 ### Does video wallpaper keep playing if the app is closed?
@@ -292,6 +346,14 @@ Some OEMs mirror lock/home wallpaper behavior unless lock wallpaper is independe
 ### Why does lock wallpaper revert after a few seconds on some devices?
 
 Some ROM features (for example lock-screen slideshow/carousel) can override third-party lock wallpaper shortly after apply.
+
+### Why does my Flutter app cold restart after wallpaper apply?
+
+On some devices the wallpaper change flow can recreate the host Android activity.
+If your app uses the default `FlutterActivity` setup, this may look like a full
+restart even though the wallpaper apply succeeded. See
+[Host App Lifecycle](#host-app-lifecycle) for the recommended `MainActivity`
+setup.
 
 ### What formats are supported?
 

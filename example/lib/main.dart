@@ -42,7 +42,6 @@ class _HomePageState extends State<HomePage> {
   String _status = 'Ready';
   bool _isLoading = false;
   Uint8List? _thumbnailBytes;
-  TargetSupportPolicy _policy = TargetSupportPolicy.unknown;
   bool _goHomeBeforeChooser = false;
 
   @override
@@ -65,7 +64,6 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadTargetPolicy() async {
     final policy = await FlutterWallpaperPlus.getTargetSupportPolicy();
     if (!mounted) return;
-    setState(() => _policy = policy);
     if (policy.restrictiveOem) {
       _updateStatus(
         '⚠️ ${policy.manufacturer} policy detected: lock/both targets '

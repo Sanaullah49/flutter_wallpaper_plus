@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] — 2026-03-12
+
+### Fixed
+- Android image wallpaper apply now downscales and normalizes oversized image sources before calling `WallpaperManager`, reducing memory pressure and improving stability on devices where the system wallpaper service could die during large image applies.
+
+### Added
+- README guidance for host apps that see `FlutterActivity` recreation / `FlutterEngine` detach-reattach after wallpaper apply, including a copy-paste `MainActivity` example using `RenderMode.texture` and a cached engine.
+
 ## [1.0.2] — 2026-02-24
 
 ### Fixed

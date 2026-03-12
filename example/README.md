@@ -2,6 +2,14 @@
 
 Demonstrates how to use the flutter_wallpaper_plus plugin.
 
+The example Android app also includes a resilient `MainActivity` setup that:
+
+- uses `RenderMode.texture`
+- reuses a cached `FlutterEngine`
+- keeps the engine alive across host activity recreation
+
+See `example/android/app/src/main/kotlin/com/example/flutter_wallpaper_plus_example/MainActivity.kt`.
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.
