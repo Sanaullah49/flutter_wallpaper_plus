@@ -56,7 +56,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  flutter_wallpaper_plus: ^1.0.3
+  flutter_wallpaper_plus: ^1.0.4
 ```
 
 Install dependencies:
@@ -110,6 +110,11 @@ if (result.success) {
   print('Failed: ${result.errorCode.name} - ${result.message}');
 }
 ```
+
+Notes:
+
+- On Android 12+ (`API 31+`), changing the wallpaper may also update the system's Material You / dynamic color palette.
+- This plugin does not provide a separate `setMaterialYouWallpaper(...)` API because that color extraction is handled by Android itself after a normal wallpaper change.
 
 ### Set Video (Live) Wallpaper
 
@@ -259,6 +264,8 @@ On some OEM ROMs (commonly Xiaomi/Redmi/Oppo/Vivo/Realme), lock-screen wallpaper
 
 **v1.0.2 Fix**: The plugin now uses sequential writes with 500ms delay between home and lock screen wallpaper sets, matching the working approach from `async_wallpaper`. This significantly improves reliability on restrictive OEMs. The plugin no longer blocks lock/both targets - it attempts them and relies on the sequential write approach for success.
 
+**v1.0.4 Fix**: Image `lock` and `both` targets now retry with a bitmap-based compatibility fallback after the normalized stream apply path. This better matches the smoother lock-screen behavior seen in older `async_wallpaper` builds on restrictive OEM ROMs.
+
 ## Real Device Results
 
 Observed behavior from real testing (as of **February 24, 2026**):
@@ -354,6 +361,12 @@ If your app uses the default `FlutterActivity` setup, this may look like a full
 restart even though the wallpaper apply succeeded. See
 [Host App Lifecycle](#host-app-lifecycle) for the recommended `MainActivity`
 setup.
+
+### Does this update Material You colors on Android 12+?
+
+Usually yes, if the device/ROM refreshes dynamic colors from the new wallpaper.
+That behavior is controlled by Android, so this plugin applies the wallpaper
+normally and the system decides whether to regenerate the Material You palette.
 
 ### What formats are supported?
 

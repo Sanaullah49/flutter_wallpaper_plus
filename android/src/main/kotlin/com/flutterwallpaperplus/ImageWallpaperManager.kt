@@ -2,6 +2,8 @@ package com.flutterwallpaperplus
 
 import android.app.WallpaperManager
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.util.Log
 import com.flutterwallpaperplus.models.ResultPayload
@@ -16,10 +18,9 @@ import java.io.FileInputStream
  *
  * Design decisions:
  *
- * 1. Uses setStream() instead of setBitmap() — this is critical for memory
- *    efficiency. setBitmap() loads the entire image into a Bitmap object in
- *    memory (can be 20-50 MB for a 4K photo). setStream() lets the system
- *    decode the image incrementally.
+ * 1. Uses setStream() as the primary apply path for memory efficiency, while
+ *    keeping a bitmap fallback for lock-sensitive targets on OEMs where the
+ *    simpler legacy bitmap flow has proven more reliable in production.
  *
  * 2. Checks isWallpaperSupported and isSetWallpaperAllowed before attempting
  *    the operation. Some managed/kiosk devices block wallpaper changes.
@@ -33,7 +34,8 @@ import java.io.FileInputStream
  *    a system error.
  *
  * 5. Uses visibleCropHint=null and allowBackup=true to let the system
- *    handle cropping and parallax automatically.
+ *    handle cropping and parallax automatically, regardless of whether
+ *    the apply path uses streams or a decoded bitmap fallback.
  */
 class ImageWallpaperManager(private val context: Context) {
 
@@ -116,7 +118,25 @@ class ImageWallpaperManager(private val context: Context) {
 
             // --- Apply wallpaper ---
             val applyResult = when (config.target) {
-                "both" -> setBothWithFallback(wallpaperManager, preparedFile)
+                "home" -> {
+                    setWallpaperForFlags(
+                        wallpaperManager = wallpaperManager,
+                        imageFile = preparedFile,
+                        flags = WallpaperManager.FLAG_SYSTEM
+                    )
+                    null
+                }
+
+                "lock" -> setLockWithCompatibilityFallback(
+                    wallpaperManager = wallpaperManager,
+                    imageFile = preparedFile
+                )
+
+                "both" -> setBothWithCompatibilityFallback(
+                    wallpaperManager = wallpaperManager,
+                    imageFile = preparedFile
+                )
+
                 else -> {
                     val flags = resolveFlags(config.target)
                     setWallpaperForFlags(wallpaperManager, preparedFile, flags)
@@ -165,10 +185,59 @@ class ImageWallpaperManager(private val context: Context) {
         }
     }
 
-    private fun setBothWithFallback(
+    private fun setLockWithCompatibilityFallback(
         wallpaperManager: WallpaperManager,
         imageFile: File
     ): ResultPayload? {
+        val restrictiveOem = OemPolicy.isRestrictiveOem()
+        val beforeLockId = safeGetWallpaperId(
+            wallpaperManager,
+            WallpaperManager.FLAG_LOCK
+        )
+
+        Log.d(
+            TAG,
+            "Applying lock wallpaper. "
+                    + "beforeLockId=$beforeLockId, "
+                    + "restrictiveOem=$restrictiveOem"
+        )
+
+        setWallpaperForFlags(
+            wallpaperManager = wallpaperManager,
+            imageFile = imageFile,
+            flags = WallpaperManager.FLAG_LOCK
+        )
+
+        val lockChanged = didWallpaperIdChange(
+            wallpaperManager = wallpaperManager,
+            which = WallpaperManager.FLAG_LOCK,
+            beforeId = beforeLockId
+        )
+
+        if (restrictiveOem || !lockChanged) {
+            Log.d(
+                TAG,
+                "Retrying lock wallpaper with bitmap fallback. "
+                        + "restrictiveOem=$restrictiveOem, "
+                        + "lockChanged=$lockChanged"
+            )
+            withDecodedBitmap(imageFile) { bitmap ->
+                setWallpaperForFlagsBitmap(
+                    wallpaperManager = wallpaperManager,
+                    bitmap = bitmap,
+                    flags = WallpaperManager.FLAG_LOCK
+                )
+            }
+        }
+
+        return null
+    }
+
+    private fun setBothWithCompatibilityFallback(
+        wallpaperManager: WallpaperManager,
+        imageFile: File
+    ): ResultPayload? {
+        val restrictiveOem = OemPolicy.isRestrictiveOem()
         val beforeSystemId = safeGetWallpaperId(
             wallpaperManager,
             WallpaperManager.FLAG_SYSTEM
@@ -182,23 +251,69 @@ class ImageWallpaperManager(private val context: Context) {
             TAG,
             "Applying both wallpapers sequentially. "
                     + "beforeSystemId=$beforeSystemId, "
-                    + "beforeLockId=$beforeLockId"
+                    + "beforeLockId=$beforeLockId, "
+                    + "restrictiveOem=$restrictiveOem"
         )
 
-        // Strategy 1: Sequential writes with delays (like async_wallpaper)
-        // This is critical for OEM devices like Xiaomi, Oppo, Vivo, Realme
         Log.d(TAG, "Setting home screen wallpaper...")
-        setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_SYSTEM)
+        setWallpaperForFlags(
+            wallpaperManager = wallpaperManager,
+            imageFile = imageFile,
+            flags = WallpaperManager.FLAG_SYSTEM
+        )
 
-        // Delay to ensure home screen is fully set
-        try {
-            Thread.sleep(500)
-        } catch (e: InterruptedException) {
-            Log.w(TAG, "Delay interrupted", e)
+        val systemChanged = didWallpaperIdChange(
+            wallpaperManager = wallpaperManager,
+            which = WallpaperManager.FLAG_SYSTEM,
+            beforeId = beforeSystemId
+        )
+
+        if (restrictiveOem || !systemChanged) {
+            Log.d(
+                TAG,
+                "Retrying home wallpaper with bitmap fallback. "
+                        + "restrictiveOem=$restrictiveOem, "
+                        + "systemChanged=$systemChanged"
+            )
+            withDecodedBitmap(imageFile) { bitmap ->
+                setWallpaperForFlagsBitmap(
+                    wallpaperManager = wallpaperManager,
+                    bitmap = bitmap,
+                    flags = WallpaperManager.FLAG_SYSTEM
+                )
+            }
         }
 
+        sleepBetweenSequentialWrites()
+
         Log.d(TAG, "Setting lock screen wallpaper...")
-        setWallpaperForFlags(wallpaperManager, imageFile, WallpaperManager.FLAG_LOCK)
+        setWallpaperForFlags(
+            wallpaperManager = wallpaperManager,
+            imageFile = imageFile,
+            flags = WallpaperManager.FLAG_LOCK
+        )
+
+        val lockChanged = didWallpaperIdChange(
+            wallpaperManager = wallpaperManager,
+            which = WallpaperManager.FLAG_LOCK,
+            beforeId = beforeLockId
+        )
+
+        if (restrictiveOem || !lockChanged) {
+            Log.d(
+                TAG,
+                "Retrying lock wallpaper with bitmap fallback. "
+                        + "restrictiveOem=$restrictiveOem, "
+                        + "lockChanged=$lockChanged"
+            )
+            withDecodedBitmap(imageFile) { bitmap ->
+                setWallpaperForFlagsBitmap(
+                    wallpaperManager = wallpaperManager,
+                    bitmap = bitmap,
+                    flags = WallpaperManager.FLAG_LOCK
+                )
+            }
+        }
 
         Log.d(TAG, "Both wallpapers set sequentially - success")
         return null
@@ -221,6 +336,45 @@ class ImageWallpaperManager(private val context: Context) {
                 true,
                 flags
             )
+        }
+    }
+
+    private fun setWallpaperForFlagsBitmap(
+        wallpaperManager: WallpaperManager,
+        bitmap: Bitmap,
+        flags: Int
+    ) {
+        wallpaperManager.setBitmap(
+            bitmap,
+            null,
+            true,
+            flags
+        )
+    }
+
+    private inline fun withDecodedBitmap(
+        imageFile: File,
+        block: (Bitmap) -> Unit
+    ) {
+        val bitmap = BitmapFactory.decodeFile(imageFile.absolutePath)
+            ?: throw IllegalArgumentException(
+                "Failed to decode prepared wallpaper bitmap: ${imageFile.name}"
+            )
+        try {
+            block(bitmap)
+        } finally {
+            if (!bitmap.isRecycled) {
+                bitmap.recycle()
+            }
+        }
+    }
+
+    private fun sleepBetweenSequentialWrites() {
+        try {
+            Thread.sleep(500)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            Log.w(TAG, "Delay interrupted", e)
         }
     }
 
