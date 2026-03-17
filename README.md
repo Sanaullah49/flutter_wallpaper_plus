@@ -4,9 +4,10 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/Sanaullah49/flutter_wallpaper_plus/blob/main/LICENSE)
 [![platform](https://img.shields.io/badge/platform-android-green.svg)](https://pub.dev/packages/flutter_wallpaper_plus)
 
-Production-grade Flutter plugin for setting **image** and **video (live)** wallpapers on Android.
+Production-grade Flutter plugin for setting **image**, **Wallpaper Auto Change**, and **video (live)** wallpapers on Android.
 
 - Set wallpaper from **asset**, **file**, or **URL**
+- Run **Wallpaper Auto Change** playlists from pre-resolved image sources
 - Use **typed results** and **structured error codes**
 - Generate and cache **video thumbnails**
 - Manage cache with **size limits + LRU eviction**
@@ -47,6 +48,7 @@ If you find this plugin useful, please consider supporting development:
 | Capability | Android Support |
 | --- | --- |
 | Static image wallpaper | API 24+ |
+| Wallpaper Auto Change (images) | API 24+ |
 | Live video wallpaper | API 24+ (device must support live wallpaper feature) |
 | Video thumbnail generation | API 24+ |
 
@@ -56,7 +58,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  flutter_wallpaper_plus: ^1.0.4
+  flutter_wallpaper_plus: ^1.1.0
 ```
 
 Install dependencies:
@@ -115,6 +117,35 @@ Notes:
 
 - On Android 12+ (`API 31+`), changing the wallpaper may also update the system's Material You / dynamic color palette.
 - This plugin does not provide a separate `setMaterialYouWallpaper(...)` API because that color extraction is handled by Android itself after a normal wallpaper change.
+
+### Wallpaper Auto Change
+
+Available on the current `main` branch and planned for the next package release.
+
+```dart
+final result = await FlutterWallpaperPlus.startWallpaperAutoChange(
+  sources: [
+    WallpaperSource.asset('assets/walls/one.jpg'),
+    WallpaperSource.url('https://example.com/walls/two.jpg'),
+    WallpaperSource.file('/storage/emulated/0/Pictures/three.jpg'),
+  ],
+  target: WallpaperTarget.both,
+  interval: const Duration(minutes: 30),
+);
+
+if (result.success) {
+  final status = await FlutterWallpaperPlus.getWallpaperAutoChangeStatus();
+  print('Running: ${status.isRunning}, next index: ${status.nextIndex}');
+}
+```
+
+Notes:
+
+- V1 is image-only.
+- The minimum supported interval is **1 minute**.
+- Scheduling is best-effort, not exact to the second. Android background policies can still defer runs slightly.
+- All sources are resolved and copied into app-internal storage before scheduling, so future runs do not depend on Flutter asset access or live network fetches.
+- Use `applyNextWallpaperNow()` for a manual advance and `stopWallpaperAutoChange()` to cancel the active playlist.
 
 ### Set Video (Live) Wallpaper
 
@@ -197,6 +228,10 @@ print(clearResult.message);
 | Method | Returns | Description |
 | --- | --- | --- |
 | `setImageWallpaper(...)` | `Future<WallpaperResult>` | Apply static image wallpaper |
+| `startWallpaperAutoChange(...)` | `Future<WallpaperResult>` | Start image Auto Change playlist |
+| `stopWallpaperAutoChange()` | `Future<WallpaperResult>` | Stop Auto Change and clear active playlist |
+| `getWallpaperAutoChangeStatus()` | `Future<WallpaperAutoChangeStatus>` | Read Auto Change status snapshot |
+| `applyNextWallpaperNow()` | `Future<WallpaperResult>` | Apply the next Auto Change image immediately |
 | `setVideoWallpaper(...)` | `Future<WallpaperResult>` | Launch system chooser for live wallpaper |
 | `openNativeWallpaperChooser(...)` | `Future<WallpaperResult>` | Open native chooser with provided source (asset/file/url) |
 | `getVideoThumbnail(...)` | `Future<Uint8List?>` | Extract video thumbnail bytes |
@@ -229,6 +264,18 @@ print(clearResult.message);
 | `message` | `String` | Human-readable outcome |
 | `errorCode` | `WallpaperErrorCode` | Structured code for handling |
 | `isError` | `bool` | Convenience getter (`!success`) |
+
+### `WallpaperAutoChangeStatus`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `isRunning` | `bool` | Whether Auto Change is active |
+| `intervalMinutes` | `int` | Configured interval in minutes |
+| `nextIndex` | `int` | Zero-based index of the next image to apply |
+| `totalCount` | `int` | Number of prepared wallpapers in the playlist |
+| `nextRunEpochMs` | `int` | Next scheduled run time in epoch milliseconds |
+| `target` | `WallpaperTarget` | Active target screen(s) |
+| `lastError` | `String?` | Last recorded native error, if any |
 
 ### `WallpaperErrorCode`
 
@@ -368,6 +415,13 @@ Usually yes, if the device/ROM refreshes dynamic colors from the new wallpaper.
 That behavior is controlled by Android, so this plugin applies the wallpaper
 normally and the system decides whether to regenerate the Material You palette.
 
+### Why can Wallpaper Auto Change still drift even with a 1-minute interval?
+
+The plugin schedules the next run with WorkManager after each apply, so Auto
+Change can work below 15 minutes and still survive app restarts. The tradeoff is
+that Android treats this as background work, which means timing is best-effort
+and OEM battery policies can delay some runs.
+
 ### What formats are supported?
 
 - Video: device codec support via MediaCodec/ExoPlayer (MP4 H.264 recommended for best compatibility)
@@ -380,6 +434,7 @@ Flutter (Dart API)
   -> MethodChannel (com.flutterwallpaperplus/methods)
     -> Kotlin plugin layer
       -> ImageWallpaperManager
+      -> WallpaperAutoChangeStore + Runner + Worker
       -> VideoWallpaperService + ExoPlayer
       -> ThumbnailGenerator
       -> SourceResolver

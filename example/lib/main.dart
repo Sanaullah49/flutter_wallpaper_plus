@@ -43,18 +43,25 @@ class _HomePageState extends State<HomePage> {
   bool _isLoading = false;
   Uint8List? _thumbnailBytes;
   bool _goHomeBeforeChooser = false;
+  WallpaperTarget _autoChangeTarget = WallpaperTarget.home;
+  final TextEditingController _autoChangeIntervalController =
+      TextEditingController(text: '1');
+  WallpaperAutoChangeStatus _autoChangeStatus =
+      const WallpaperAutoChangeStatus.stopped();
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
     _loadTargetPolicy();
+    _refreshAutoChangeStatus(showBusy: false);
     debugPrint('[ExampleDart] HomePage initState');
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    _autoChangeIntervalController.dispose();
     debugPrint('[ExampleDart] HomePage dispose');
     super.dispose();
   }
@@ -67,7 +74,7 @@ class _HomePageState extends State<HomePage> {
     if (policy.restrictiveOem) {
       _updateStatus(
         '⚠️ ${policy.manufacturer} policy detected: lock/both targets '
-        'are disabled for reliability.',
+        'may still vary by ROM behavior.',
       );
     }
   }
@@ -83,6 +90,15 @@ class _HomePageState extends State<HomePage> {
   static const _imageUrl2 =
       'https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05'
       '?w=1080&q=80';
+
+  static const _autoChangeImage1 =
+      'https://dummyimage.com/1080x1920/ff6b6b/ffffff.jpg&text=Auto+Change+1';
+
+  static const _autoChangeImage2 =
+      'https://dummyimage.com/1080x1920/4ecdc4/0b1f2a.jpg&text=Auto+Change+2';
+
+  static const _autoChangeImage3 =
+      'https://dummyimage.com/1080x1920/1a73e8/ffffff.jpg&text=Auto+Change+3';
 
   static const _videoUrl =
       'https://commondatastorage.googleapis.com/gtv-videos-bucket/'
@@ -117,6 +133,35 @@ class _HomePageState extends State<HomePage> {
           ? '✅ ${result.message}'
           : '❌ ${result.message}\nCode: ${result.errorCode.name}',
     );
+  }
+
+  int get _autoChangeIntervalMinutes {
+    final parsed = int.tryParse(_autoChangeIntervalController.text.trim());
+    return parsed ?? 1;
+  }
+
+  List<WallpaperSource> get _autoChangeSources => [
+    WallpaperSource.url(_autoChangeImage1),
+    WallpaperSource.url(_autoChangeImage2),
+    WallpaperSource.url(_autoChangeImage3),
+  ];
+
+  String get _autoChangeStatusText {
+    final status = _autoChangeStatus;
+    final nextRun = status.nextRunAt;
+    final nextRunText = nextRun == null
+        ? 'Not scheduled'
+        : '${nextRun.hour.toString().padLeft(2, '0')}:'
+              '${nextRun.minute.toString().padLeft(2, '0')}:'
+              '${nextRun.second.toString().padLeft(2, '0')}';
+
+    return 'Running: ${status.isRunning ? 'Yes' : 'No'}\n'
+        'Target: ${status.target.name}\n'
+        'Interval: ${status.intervalMinutes} min\n'
+        'Playlist: ${status.totalCount} wallpapers\n'
+        'Next index: ${status.nextIndex}\n'
+        'Next run: $nextRunText\n'
+        'Last error: ${status.lastError ?? 'None'}';
   }
 
   // ================================================================
@@ -158,6 +203,64 @@ class _HomePageState extends State<HomePage> {
         target: WallpaperTarget.both,
       ),
     );
+  });
+
+  // ================================================================
+  // Auto Change Actions
+  // ================================================================
+
+  Future<void> _refreshAutoChangeStatus({bool showBusy = true}) async {
+    if (showBusy) {
+      _loading(true);
+    }
+
+    try {
+      final status = await FlutterWallpaperPlus.getWallpaperAutoChangeStatus();
+      if (!mounted) return;
+
+      setState(() => _autoChangeStatus = status);
+      _updateStatus('ℹ️ Auto Change status refreshed');
+    } catch (e) {
+      _updateStatus('❌ Failed to load Auto Change status: $e');
+    } finally {
+      if (showBusy) {
+        _loading(false);
+      }
+    }
+  }
+
+  Future<void> _startAutoChange() => _run('Auto Change → Start', () async {
+    final result = await FlutterWallpaperPlus.startWallpaperAutoChange(
+      sources: _autoChangeSources,
+      target: _autoChangeTarget,
+      interval: Duration(minutes: _autoChangeIntervalMinutes),
+      successMessage: 'Wallpaper Auto Change started',
+      errorMessage: 'Failed to start Wallpaper Auto Change',
+    );
+
+    _showResult(result);
+    await _refreshAutoChangeStatus(showBusy: false);
+  });
+
+  Future<void> _applyNextAutoChangeNow() =>
+      _run('Auto Change → Apply next now', () async {
+        final result = await FlutterWallpaperPlus.applyNextWallpaperNow(
+          successMessage: 'Applied next Auto Change wallpaper',
+          errorMessage: 'Failed to apply next Auto Change wallpaper',
+        );
+
+        _showResult(result);
+        await _refreshAutoChangeStatus(showBusy: false);
+      });
+
+  Future<void> _stopAutoChange() => _run('Auto Change → Stop', () async {
+    final result = await FlutterWallpaperPlus.stopWallpaperAutoChange(
+      successMessage: 'Wallpaper Auto Change stopped',
+      errorMessage: 'Failed to stop Wallpaper Auto Change',
+    );
+
+    _showResult(result);
+    await _refreshAutoChangeStatus(showBusy: false);
   });
 
   // ================================================================
@@ -433,13 +536,111 @@ class _HomePageState extends State<HomePage> {
             children: [
               Expanded(child: _btn(Icons.home_outlined, 'Home', _imageUrlHome)),
               const SizedBox(width: 8),
-              Expanded(
-                child: _btn(Icons.lock_outline, 'Lock', _imageUrlLock),
-              ),
+              Expanded(child: _btn(Icons.lock_outline, 'Lock', _imageUrlLock)),
             ],
           ),
           const SizedBox(height: 8),
           _btn(Icons.folder_outlined, 'Asset → Both', _imageAsset),
+
+          const SizedBox(height: 20),
+
+          // Auto Change
+          _header('Wallpaper Auto Change'),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Quick verification',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Uses 3 bold sample wallpapers so you can quickly confirm '
+                    'home, lock, or both target behavior.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Target', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  SegmentedButton<WallpaperTarget>(
+                    segments: const [
+                      ButtonSegment(
+                        value: WallpaperTarget.home,
+                        label: Text('Home'),
+                        icon: Icon(Icons.home_outlined),
+                      ),
+                      ButtonSegment(
+                        value: WallpaperTarget.lock,
+                        label: Text('Lock'),
+                        icon: Icon(Icons.lock_outline),
+                      ),
+                      ButtonSegment(
+                        value: WallpaperTarget.both,
+                        label: Text('Both'),
+                        icon: Icon(Icons.smartphone_outlined),
+                      ),
+                    ],
+                    selected: {_autoChangeTarget},
+                    onSelectionChanged: _isLoading
+                        ? null
+                        : (selection) => setState(
+                            () => _autoChangeTarget = selection.first,
+                          ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _autoChangeIntervalController,
+                    enabled: !_isLoading,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Interval (minutes)',
+                      helperText:
+                          'Minimum 1 minute. Background timing is best-effort.',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _autoChangeStatusText,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _btn(
+                        Icons.play_arrow_outlined,
+                        'Start',
+                        _startAutoChange,
+                      ),
+                      _outlineBtn(
+                        Icons.refresh_outlined,
+                        'Refresh Status',
+                        () => _refreshAutoChangeStatus(),
+                      ),
+                      _outlineBtn(
+                        Icons.skip_next_outlined,
+                        'Apply Next Now',
+                        _applyNextAutoChangeNow,
+                      ),
+                      _outlineBtn(
+                        Icons.stop_circle_outlined,
+                        'Stop',
+                        _stopAutoChange,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
 
           const SizedBox(height: 20),
 

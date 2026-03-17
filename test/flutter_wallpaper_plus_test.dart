@@ -26,6 +26,34 @@ void main() {
                 'message': 'Live wallpaper ready',
                 'errorCode': 'none',
               };
+            case 'startWallpaperAutoChange':
+              return <String, dynamic>{
+                'success': true,
+                'message': 'Wallpaper Auto Change started',
+                'errorCode': 'none',
+              };
+            case 'stopWallpaperAutoChange':
+              return <String, dynamic>{
+                'success': true,
+                'message': 'Wallpaper Auto Change stopped',
+                'errorCode': 'none',
+              };
+            case 'getWallpaperAutoChangeStatus':
+              return <String, dynamic>{
+                'isRunning': true,
+                'intervalMinutes': 30,
+                'nextIndex': 1,
+                'totalCount': 3,
+                'nextRunEpochMs': 1710000000000,
+                'target': 'both',
+                'lastError': null,
+              };
+            case 'applyNextWallpaperNow':
+              return <String, dynamic>{
+                'success': true,
+                'message': 'Applied next Auto Change wallpaper',
+                'errorCode': 'none',
+              };
             case 'openNativeWallpaperChooser':
               return <String, dynamic>{
                 'success': true,
@@ -335,6 +363,37 @@ void main() {
   });
 
   // ================================================================
+  // WallpaperAutoChangeStatus
+  // ================================================================
+
+  group('WallpaperAutoChangeStatus', () {
+    test('parses platform map', () {
+      final status = WallpaperAutoChangeStatus.fromMap({
+        'isRunning': true,
+        'intervalMinutes': 45,
+        'nextIndex': 2,
+        'totalCount': 5,
+        'nextRunEpochMs': 1710000000000,
+        'target': 'lock',
+        'lastError': 'oops',
+      });
+
+      expect(status.isRunning, isTrue);
+      expect(status.intervalMinutes, 45);
+      expect(status.nextIndex, 2);
+      expect(status.totalCount, 5);
+      expect(status.target, WallpaperTarget.lock);
+      expect(status.lastError, 'oops');
+      expect(status.nextRunAt, isNotNull);
+    });
+
+    test('defaults to stopped on null', () {
+      final status = WallpaperAutoChangeStatus.fromMap(null);
+      expect(status, const WallpaperAutoChangeStatus.stopped());
+    });
+  });
+
+  // ================================================================
   // setImageWallpaper
   // ================================================================
 
@@ -462,6 +521,124 @@ void main() {
         target: WallpaperTarget.home,
       );
       expect(r.success, isFalse);
+    });
+  });
+
+  // ================================================================
+  // Wallpaper Auto Change
+  // ================================================================
+
+  group('WallpaperAutoChange', () {
+    test('start serializes playlist and interval', () async {
+      final result = await FlutterWallpaperPlus.startWallpaperAutoChange(
+        sources: [
+          WallpaperSource.asset('a.jpg'),
+          WallpaperSource.url('https://e.com/b.jpg'),
+        ],
+        target: WallpaperTarget.both,
+        interval: const Duration(minutes: 30),
+        successMessage: 'Started',
+        errorMessage: 'Failed',
+        showToast: false,
+        goToHome: true,
+      );
+
+      expect(result.success, isTrue);
+      final args = log.first.arguments as Map;
+      expect(args['target'], 'both');
+      expect(args['intervalMinutes'], 30);
+      expect(args['showToast'], false);
+      expect(args['goToHome'], true);
+      expect(args['successMessage'], 'Started');
+      expect(args['errorMessage'], 'Failed');
+      final sources = args['sources'] as List;
+      expect(sources, hasLength(2));
+      expect((sources[0] as Map)['type'], 'asset');
+      expect((sources[1] as Map)['type'], 'url');
+    });
+
+    test('start uses defaults', () async {
+      await FlutterWallpaperPlus.startWallpaperAutoChange(
+        sources: [WallpaperSource.asset('a.jpg')],
+        target: WallpaperTarget.home,
+        interval: const Duration(minutes: 1),
+      );
+
+      final args = log.first.arguments as Map;
+      expect(args['successMessage'], 'Wallpaper Auto Change started');
+      expect(args['errorMessage'], 'Failed to start Wallpaper Auto Change');
+      expect(args['showToast'], true);
+      expect(args['goToHome'], false);
+    });
+
+    test('start throws on empty sources', () async {
+      await expectLater(
+        FlutterWallpaperPlus.startWallpaperAutoChange(
+          sources: const [],
+          target: WallpaperTarget.home,
+          interval: const Duration(minutes: 1),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('start throws when interval is below 1 minute', () async {
+      await expectLater(
+        FlutterWallpaperPlus.startWallpaperAutoChange(
+          sources: [WallpaperSource.asset('a.jpg')],
+          target: WallpaperTarget.home,
+          interval: const Duration(seconds: 59),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('stop serializes args', () async {
+      final result = await FlutterWallpaperPlus.stopWallpaperAutoChange(
+        successMessage: 'Stopped',
+        errorMessage: 'Stop failed',
+        showToast: false,
+      );
+
+      expect(result.success, isTrue);
+      final args = log.first.arguments as Map;
+      expect(args['successMessage'], 'Stopped');
+      expect(args['errorMessage'], 'Stop failed');
+      expect(args['showToast'], false);
+    });
+
+    test('status parses platform payload', () async {
+      final status = await FlutterWallpaperPlus.getWallpaperAutoChangeStatus();
+      expect(status.isRunning, isTrue);
+      expect(status.intervalMinutes, 30);
+      expect(status.nextIndex, 1);
+      expect(status.totalCount, 3);
+      expect(status.target, WallpaperTarget.both);
+      expect(status.lastError, isNull);
+    });
+
+    test('status falls back to stopped on null response', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (c) async => null);
+
+      final status = await FlutterWallpaperPlus.getWallpaperAutoChangeStatus();
+      expect(status, const WallpaperAutoChangeStatus.stopped());
+    });
+
+    test('applyNow serializes args', () async {
+      final result = await FlutterWallpaperPlus.applyNextWallpaperNow(
+        successMessage: 'Applied',
+        errorMessage: 'Apply failed',
+        showToast: false,
+        goToHome: true,
+      );
+
+      expect(result.success, isTrue);
+      final args = log.first.arguments as Map;
+      expect(args['successMessage'], 'Applied');
+      expect(args['errorMessage'], 'Apply failed');
+      expect(args['showToast'], false);
+      expect(args['goToHome'], true);
     });
   });
 

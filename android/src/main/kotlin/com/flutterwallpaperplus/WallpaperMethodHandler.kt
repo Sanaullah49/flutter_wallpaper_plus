@@ -20,6 +20,8 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.flutterwallpaperplus.models.ResultPayload
+import com.flutterwallpaperplus.models.WallpaperAutoChangeConfig
+import com.flutterwallpaperplus.models.WallpaperAutoChangeStatusPayload
 import com.flutterwallpaperplus.models.WallpaperConfig
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -31,8 +33,9 @@ import java.util.Locale
 /**
  * Central method call handler for all plugin operations.
  *
- * All four features are now fully implemented:
+ * Core plugin features are implemented here:
  * - Phase 2: Image wallpaper
+ * - Phase 2.5: Wallpaper Auto Change
  * - Phase 3: Video wallpaper
  * - Phase 4: Thumbnail generation
  * - Phase 1: Cache management
@@ -46,6 +49,7 @@ class WallpaperMethodHandler(
         private const val TAG = "WallpaperMethodHandler"
         private const val LIVE_VIDEO_DIR_NAME = "wallpaper_plus_live"
         private const val ACTIVE_LIVE_VIDEO_BASENAME = "active_live_video"
+        private const val AUTO_CHANGE_STAGING_DIR_NAME = "wallpaper_plus_auto_change_staging"
     }
 
     private val scope = CoroutineScope(
@@ -64,6 +68,14 @@ class WallpaperMethodHandler(
         ImageWallpaperManager(context)
     }
 
+    private val autoChangeStore: WallpaperAutoChangeStore by lazy {
+        WallpaperAutoChangeStore(context)
+    }
+
+    private val autoChangeRunner: WallpaperAutoChangeRunner by lazy {
+        WallpaperAutoChangeRunner(context)
+    }
+
     private val thumbnailGenerator: ThumbnailGenerator by lazy {
         ThumbnailGenerator(cacheManager)
     }
@@ -73,6 +85,10 @@ class WallpaperMethodHandler(
 
         when (call.method) {
             "setImageWallpaper" -> handleSetImageWallpaper(call, result)
+            "startWallpaperAutoChange" -> handleStartWallpaperAutoChange(call, result)
+            "stopWallpaperAutoChange" -> handleStopWallpaperAutoChange(call, result)
+            "getWallpaperAutoChangeStatus" -> handleGetWallpaperAutoChangeStatus(result)
+            "applyNextWallpaperNow" -> handleApplyNextWallpaperNow(call, result)
             "setVideoWallpaper" -> handleSetVideoWallpaper(call, result)
             "openNativeWallpaperChooser" -> handleOpenNativeWallpaperChooser(call, result)
             "getTargetSupportPolicy" -> handleGetTargetSupportPolicy(call, result)
@@ -244,6 +260,367 @@ class WallpaperMethodHandler(
                 )
             }
         }
+    }
+
+    // ================================================================
+    // Wallpaper Auto Change
+    // ================================================================
+
+    @Suppress("UNCHECKED_CAST")
+    private fun handleStartWallpaperAutoChange(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
+        scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            var outcome = "unknown"
+            try {
+                val args = call.arguments as? Map<String, Any?>
+                if (args == null) {
+                    outcome = "invalid_args"
+                    result.success(
+                        ResultPayload.error(
+                            "Invalid arguments passed to startWallpaperAutoChange",
+                            "applyFailed"
+                        ).toMap()
+                    )
+                    return@launch
+                }
+
+                val config = try {
+                    WallpaperAutoChangeConfig.fromMap(args)
+                } catch (e: IllegalArgumentException) {
+                    outcome = "invalid_config"
+                    result.success(
+                        ResultPayload.error(
+                            "Invalid Auto Change configuration: ${e.message}",
+                            "applyFailed"
+                        ).toMap()
+                    )
+                    return@launch
+                }
+
+                if (!config.isValid()) {
+                    outcome = "invalid_config"
+                    result.success(
+                        ResultPayload.error(
+                            "Invalid Wallpaper Auto Change configuration.",
+                            "applyFailed"
+                        ).toMap()
+                    )
+                    return@launch
+                }
+
+                if (!PermissionHelper.hasWallpaperPermission(context)) {
+                    outcome = "permission_denied"
+                    val payload = ResultPayload.error(
+                        "SET_WALLPAPER permission is not granted.",
+                        "permissionDenied"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                if (config.sources.any { source ->
+                        source.sourceType == "file" &&
+                                !isAppInternalPath(source.sourcePath)
+                    } &&
+                    !PermissionHelper.hasStorageReadPermission(context)
+                ) {
+                    outcome = "permission_denied"
+                    val payload = ResultPayload.error(
+                        "Storage read permission is required to access "
+                                + "files outside the app directory.",
+                        "permissionDenied"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                val stagedFiles = try {
+                    prepareAutoChangeSources(config)
+                } catch (e: SourceResolver.SourceNotFoundException) {
+                    outcome = "source_not_found"
+                    val payload = ResultPayload.error(
+                        e.message ?: "Source not found",
+                        "sourceNotFound"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                } catch (e: CacheManager.DownloadException) {
+                    outcome = "download_failed"
+                    val payload = ResultPayload.error(
+                        e.message ?: "Download failed",
+                        "downloadFailed"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                if (stagedFiles.isEmpty()) {
+                    outcome = "source_not_found"
+                    val payload = ResultPayload.error(
+                        "Wallpaper Auto Change has no prepared wallpapers.",
+                        "sourceNotFound"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                val firstApply = imageWallpaperManager.setWallpaper(
+                    imageFile = stagedFiles.first(),
+                    config = WallpaperConfig(
+                        sourceType = "file",
+                        sourcePath = stagedFiles.first().absolutePath,
+                        target = config.target,
+                        successMessage = config.successMessage,
+                        errorMessage = config.errorMessage,
+                        showToast = false,
+                        goToHome = config.goToHome,
+                    ),
+                )
+
+                if (!firstApply.success) {
+                    outcome = firstApply.errorCode
+                    clearPreparedAutoChangeStagingDir()
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(firstApply.toMap())
+                    return@launch
+                }
+
+                try {
+                    WallpaperAutoChangeScheduler.cancel(context)
+                    autoChangeStore.clear()
+
+                    val localSources = activatePreparedAutoChangeSources(stagedFiles)
+                    autoChangeStore.saveConfig(
+                        localSources = localSources,
+                        target = config.target,
+                        intervalMinutes = config.intervalMinutes,
+                    )
+                    autoChangeStore.setNextIndex(
+                        if (localSources.size > 1) 1 else 0
+                    )
+                    autoChangeStore.setNextRunEpochMs(
+                        System.currentTimeMillis() +
+                                config.intervalMinutes.toLong() * 60_000L
+                    )
+
+                    WallpaperAutoChangeScheduler.schedule(
+                        context,
+                        config.intervalMinutes
+                    )
+                } catch (e: Exception) {
+                    outcome = "schedule_failed"
+                    WallpaperAutoChangeScheduler.cancel(context)
+                    autoChangeStore.clear()
+                    autoChangeRunner.clearPreparedWallpapers()
+                    clearPreparedAutoChangeStagingDir()
+                    Log.e(TAG, "Failed to activate Wallpaper Auto Change", e)
+                    val payload = ResultPayload.error(
+                        "Failed to activate Wallpaper Auto Change: ${e.message}",
+                        "applyFailed"
+                    )
+                    showToastIfNeeded(config.showToast, config.errorMessage)
+                    result.success(payload.toMap())
+                    return@launch
+                }
+
+                clearPreparedAutoChangeStagingDir()
+                outcome = "success"
+                showToastIfNeeded(config.showToast, config.successMessage)
+                result.success(ResultPayload.success(config.successMessage).toMap())
+            } catch (e: Exception) {
+                outcome = "exception"
+                clearPreparedAutoChangeStagingDir()
+                Log.e(TAG, "startWallpaperAutoChange: unexpected exception", e)
+                result.success(
+                    ResultPayload.error(
+                        "Unexpected error: ${e.message ?: "Unknown"}",
+                        "unknown"
+                    ).toMap()
+                )
+            } finally {
+                Log.d(
+                    TAG,
+                    "startWallpaperAutoChange finished: outcome=$outcome, "
+                            + "total=${SystemClock.elapsedRealtime() - startedAt}ms"
+                )
+            }
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun handleStopWallpaperAutoChange(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
+        scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            var outcome = "unknown"
+            val args = call.arguments as? Map<String, Any?> ?: emptyMap<String, Any?>()
+            val successMessage = args["successMessage"] as? String
+                ?: "Wallpaper Auto Change stopped"
+            val errorMessage = args["errorMessage"] as? String
+                ?: "Failed to stop Wallpaper Auto Change"
+            val showToast = args["showToast"] as? Boolean ?: true
+
+            try {
+                WallpaperAutoChangeScheduler.cancel(context)
+                autoChangeStore.clear()
+                autoChangeRunner.clearPreparedWallpapers()
+                clearPreparedAutoChangeStagingDir()
+
+                outcome = "success"
+                showToastIfNeeded(showToast, successMessage)
+                result.success(ResultPayload.success(successMessage).toMap())
+            } catch (e: Exception) {
+                outcome = "exception"
+                Log.e(TAG, "stopWallpaperAutoChange: unexpected exception", e)
+                showToastIfNeeded(showToast, errorMessage)
+                result.success(
+                    ResultPayload.error(
+                        "Failed to stop Wallpaper Auto Change: ${e.message ?: "Unknown"}",
+                        "applyFailed"
+                    ).toMap()
+                )
+            } finally {
+                Log.d(
+                    TAG,
+                    "stopWallpaperAutoChange finished: outcome=$outcome, "
+                            + "total=${SystemClock.elapsedRealtime() - startedAt}ms"
+                )
+            }
+        }
+    }
+
+    private fun handleGetWallpaperAutoChangeStatus(result: MethodChannel.Result) {
+        try {
+            result.success(autoChangeStore.getStatusPayload().toMap())
+        } catch (e: Exception) {
+            Log.e(TAG, "getWallpaperAutoChangeStatus failed", e)
+            result.success(
+                WallpaperAutoChangeStatusPayload.stopped(
+                    lastError = e.message ?: "Failed to read Auto Change status"
+                ).toMap()
+            )
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun handleApplyNextWallpaperNow(
+        call: MethodCall,
+        result: MethodChannel.Result
+    ) {
+        scope.launch {
+            val startedAt = SystemClock.elapsedRealtime()
+            var outcome = "unknown"
+            val args = call.arguments as? Map<String, Any?> ?: emptyMap<String, Any?>()
+            val successMessage = args["successMessage"] as? String
+                ?: "Applied next Auto Change wallpaper"
+            val errorMessage = args["errorMessage"] as? String
+                ?: "Failed to apply next Auto Change wallpaper"
+            val showToast = args["showToast"] as? Boolean ?: true
+            val goToHome = args["goToHome"] as? Boolean ?: false
+
+            try {
+                val payload = autoChangeRunner.applyNext(goToHome = goToHome)
+                if (autoChangeStore.isRunning()) {
+                    val intervalMinutes = autoChangeStore.getIntervalMinutes()
+                    if (intervalMinutes > 0) {
+                        WallpaperAutoChangeScheduler.schedule(context, intervalMinutes)
+                    }
+                }
+
+                if (payload.success) {
+                    outcome = "success"
+                    showToastIfNeeded(showToast, successMessage)
+                    result.success(ResultPayload.success(successMessage).toMap())
+                } else {
+                    outcome = payload.errorCode
+                    showToastIfNeeded(showToast, errorMessage)
+                    result.success(payload.toMap())
+                }
+            } catch (e: Exception) {
+                outcome = "exception"
+                Log.e(TAG, "applyNextWallpaperNow: unexpected exception", e)
+                showToastIfNeeded(showToast, errorMessage)
+                result.success(
+                    ResultPayload.error(
+                        "Unexpected error: ${e.message ?: "Unknown"}",
+                        "unknown"
+                    ).toMap()
+                )
+            } finally {
+                Log.d(
+                    TAG,
+                    "applyNextWallpaperNow finished: outcome=$outcome, "
+                            + "total=${SystemClock.elapsedRealtime() - startedAt}ms"
+                )
+            }
+        }
+    }
+
+    private suspend fun prepareAutoChangeSources(
+        config: WallpaperAutoChangeConfig
+    ): List<File> = withContext(Dispatchers.IO) {
+        val stagingDir = preparedAutoChangeStagingDir()
+        stagingDir.deleteRecursively()
+        stagingDir.mkdirs()
+
+        try {
+            config.sources.mapIndexed { index, source ->
+                val resolvedFile = sourceResolver.resolve(
+                    source.sourceType,
+                    source.sourcePath
+                )
+                val preparedFile = File(
+                    stagingDir,
+                    buildPreparedAutoChangeFileName(index, resolvedFile)
+                )
+                resolvedFile.copyTo(preparedFile, overwrite = true)
+                preparedFile
+            }
+        } catch (e: Exception) {
+            stagingDir.deleteRecursively()
+            throw e
+        }
+    }
+
+    private fun activatePreparedAutoChangeSources(stagedFiles: List<File>): List<String> {
+        val preparedDir = WallpaperAutoChangeRunner.preparedWallpapersDir(context)
+        preparedDir.deleteRecursively()
+        preparedDir.mkdirs()
+
+        return stagedFiles.map { stagedFile ->
+            val activatedFile = File(preparedDir, stagedFile.name)
+            stagedFile.copyTo(activatedFile, overwrite = true)
+            activatedFile.absolutePath
+        }
+    }
+
+    private fun preparedAutoChangeStagingDir(): File =
+        File(context.filesDir, AUTO_CHANGE_STAGING_DIR_NAME).also {
+            if (!it.exists()) {
+                it.mkdirs()
+            }
+        }
+
+    private fun clearPreparedAutoChangeStagingDir() {
+        preparedAutoChangeStagingDir().deleteRecursively()
+    }
+
+    private fun buildPreparedAutoChangeFileName(index: Int, resolvedFile: File): String {
+        val extension = resolvedFile.extension
+            .takeIf { it.isNotBlank() }
+            ?.let { ".$it" }
+            ?: ""
+        return "wallpaper_${index.toString().padStart(3, '0')}$extension"
     }
 
     // ================================================================

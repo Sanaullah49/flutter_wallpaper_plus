@@ -7,6 +7,7 @@ import 'wallpaper_result.dart';
 import 'wallpaper_source.dart';
 import 'wallpaper_target.dart';
 import 'target_support_policy.dart';
+import 'wallpaper_auto_change_status.dart';
 
 /// Internal implementation layer that communicates with the Android platform.
 ///
@@ -114,6 +115,184 @@ class FlutterWallpaperPlusImpl {
           'goToHome': goToHome,
         },
       );
+
+      if (result != null) {
+        return WallpaperResult.fromMap(result);
+      }
+
+      return WallpaperResult(
+        success: false,
+        message: errorMessage ?? 'No response from platform layer',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    } on PlatformException catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: e.message ?? errorMessage ?? 'Platform error occurred',
+        errorCode: WallpaperErrorCodeParsing.fromString(e.code),
+      );
+    } on MissingPluginException {
+      return const WallpaperResult(
+        success: false,
+        message: 'Plugin not available. Are you running on Android?',
+        errorCode: WallpaperErrorCode.unsupported,
+      );
+    } catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: 'Unexpected error: ${e.toString()}',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    }
+  }
+
+  /// Starts wallpaper Auto Change using a pre-resolved playlist and interval.
+  static Future<WallpaperResult> startWallpaperAutoChange({
+    required List<WallpaperSource> sources,
+    required WallpaperTarget target,
+    required Duration interval,
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+    bool goToHome = false,
+  }) async {
+    if (sources.isEmpty) {
+      throw ArgumentError.value(
+        sources,
+        'sources',
+        'At least one wallpaper source is required',
+      );
+    }
+    if (interval.inMinutes < 1) {
+      throw ArgumentError.value(
+        interval,
+        'interval',
+        'Auto Change requires a minimum interval of 1 minute',
+      );
+    }
+
+    try {
+      final result = await _channel
+          .invokeMethod<Map>('startWallpaperAutoChange', <String, dynamic>{
+            'sources': sources.map((source) => source.toMap()).toList(),
+            'target': target.name,
+            'intervalMinutes': interval.inMinutes,
+            'successMessage': successMessage ?? 'Wallpaper Auto Change started',
+            'errorMessage':
+                errorMessage ?? 'Failed to start Wallpaper Auto Change',
+            'showToast': showToast,
+            'goToHome': goToHome,
+          });
+
+      if (result != null) {
+        return WallpaperResult.fromMap(result);
+      }
+
+      return WallpaperResult(
+        success: false,
+        message: errorMessage ?? 'No response from platform layer',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    } on PlatformException catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: e.message ?? errorMessage ?? 'Platform error occurred',
+        errorCode: WallpaperErrorCodeParsing.fromString(e.code),
+      );
+    } on MissingPluginException {
+      return const WallpaperResult(
+        success: false,
+        message: 'Plugin not available. Are you running on Android?',
+        errorCode: WallpaperErrorCode.unsupported,
+      );
+    } catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: 'Unexpected error: ${e.toString()}',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    }
+  }
+
+  /// Stops wallpaper Auto Change and clears the current playlist.
+  static Future<WallpaperResult> stopWallpaperAutoChange({
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+  }) async {
+    try {
+      final result = await _channel
+          .invokeMethod<Map>('stopWallpaperAutoChange', <String, dynamic>{
+            'successMessage': successMessage ?? 'Wallpaper Auto Change stopped',
+            'errorMessage':
+                errorMessage ?? 'Failed to stop Wallpaper Auto Change',
+            'showToast': showToast,
+          });
+
+      if (result != null) {
+        return WallpaperResult.fromMap(result);
+      }
+
+      return WallpaperResult(
+        success: false,
+        message: errorMessage ?? 'No response from platform layer',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    } on PlatformException catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: e.message ?? errorMessage ?? 'Platform error occurred',
+        errorCode: WallpaperErrorCodeParsing.fromString(e.code),
+      );
+    } on MissingPluginException {
+      return const WallpaperResult(
+        success: false,
+        message: 'Plugin not available. Are you running on Android?',
+        errorCode: WallpaperErrorCode.unsupported,
+      );
+    } catch (e) {
+      return WallpaperResult(
+        success: false,
+        message: 'Unexpected error: ${e.toString()}',
+        errorCode: WallpaperErrorCode.unknown,
+      );
+    }
+  }
+
+  /// Returns the current wallpaper Auto Change status.
+  static Future<WallpaperAutoChangeStatus>
+  getWallpaperAutoChangeStatus() async {
+    try {
+      final result = await _channel.invokeMethod<Map>(
+        'getWallpaperAutoChangeStatus',
+      );
+      return WallpaperAutoChangeStatus.fromMap(result);
+    } on PlatformException {
+      return const WallpaperAutoChangeStatus.stopped();
+    } on MissingPluginException {
+      return const WallpaperAutoChangeStatus.stopped();
+    } catch (_) {
+      return const WallpaperAutoChangeStatus.stopped();
+    }
+  }
+
+  /// Applies the next wallpaper in the current Auto Change playlist immediately.
+  static Future<WallpaperResult> applyNextWallpaperNow({
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+    bool goToHome = false,
+  }) async {
+    try {
+      final result = await _channel
+          .invokeMethod<Map>('applyNextWallpaperNow', <String, dynamic>{
+            'successMessage':
+                successMessage ?? 'Applied next Auto Change wallpaper',
+            'errorMessage':
+                errorMessage ?? 'Failed to apply next Auto Change wallpaper',
+            'showToast': showToast,
+            'goToHome': goToHome,
+          });
 
       if (result != null) {
         return WallpaperResult.fromMap(result);

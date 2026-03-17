@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-03-17
+
+### Added
+- Android Wallpaper Auto Change V1 for static images, including `startWallpaperAutoChange(...)`, `stopWallpaperAutoChange()`, `getWallpaperAutoChangeStatus()`, and `applyNextWallpaperNow()`.
+- Up-front source preparation into app-internal storage so scheduled changes continue to work without Flutter asset access or live network fetches in the background worker.
+- WorkManager-based one-shot rescheduling for Auto Change so intervals can start at 1 minute while still continuing after the app is closed.
+- Example app Auto Change panel for quick real-device verification of `home`, `lock`, and `both` target behavior.
+
 ## [1.0.4] — 2026-03-16
 
 ### Fixed

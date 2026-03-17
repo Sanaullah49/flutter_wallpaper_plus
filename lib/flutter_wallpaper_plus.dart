@@ -51,6 +51,7 @@ import 'dart:typed_data';
 
 import 'src/flutter_wallpaper_plus_impl.dart';
 import 'src/target_support_policy.dart';
+import 'src/wallpaper_auto_change_status.dart';
 import 'src/wallpaper_result.dart';
 import 'src/wallpaper_source.dart';
 import 'src/wallpaper_target.dart';
@@ -60,6 +61,7 @@ export 'src/wallpaper_error_code.dart';
 export 'src/wallpaper_result.dart';
 export 'src/wallpaper_source.dart';
 export 'src/target_support_policy.dart';
+export 'src/wallpaper_auto_change_status.dart';
 export 'src/wallpaper_target.dart';
 
 /// Primary API for setting wallpapers on Android.
@@ -134,6 +136,68 @@ class FlutterWallpaperPlus {
     return FlutterWallpaperPlusImpl.setImageWallpaper(
       source: source,
       target: target,
+      successMessage: successMessage,
+      errorMessage: errorMessage,
+      showToast: showToast,
+      goToHome: goToHome,
+    );
+  }
+
+  /// Starts image-based Wallpaper Auto Change on Android.
+  ///
+  /// V1 intentionally keeps the feature simple:
+  /// - image sources only
+  /// - one interval for the entire playlist
+  /// - one-minute minimum interval
+  ///
+  /// All [sources] are resolved up front so background changes do not
+  /// depend on Flutter asset access or live network fetches.
+  static Future<WallpaperResult> startWallpaperAutoChange({
+    required List<WallpaperSource> sources,
+    required WallpaperTarget target,
+    required Duration interval,
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+    bool goToHome = false,
+  }) {
+    return FlutterWallpaperPlusImpl.startWallpaperAutoChange(
+      sources: sources,
+      target: target,
+      interval: interval,
+      successMessage: successMessage,
+      errorMessage: errorMessage,
+      showToast: showToast,
+      goToHome: goToHome,
+    );
+  }
+
+  /// Stops Wallpaper Auto Change and clears the active playlist.
+  static Future<WallpaperResult> stopWallpaperAutoChange({
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+  }) {
+    return FlutterWallpaperPlusImpl.stopWallpaperAutoChange(
+      successMessage: successMessage,
+      errorMessage: errorMessage,
+      showToast: showToast,
+    );
+  }
+
+  /// Returns the current Wallpaper Auto Change status.
+  static Future<WallpaperAutoChangeStatus> getWallpaperAutoChangeStatus() {
+    return FlutterWallpaperPlusImpl.getWallpaperAutoChangeStatus();
+  }
+
+  /// Applies the next wallpaper in the active Auto Change playlist immediately.
+  static Future<WallpaperResult> applyNextWallpaperNow({
+    String? successMessage,
+    String? errorMessage,
+    bool showToast = true,
+    bool goToHome = false,
+  }) {
+    return FlutterWallpaperPlusImpl.applyNextWallpaperNow(
       successMessage: successMessage,
       errorMessage: errorMessage,
       showToast: showToast,

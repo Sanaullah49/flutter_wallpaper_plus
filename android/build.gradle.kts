@@ -49,6 +49,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.10.0")
     implementation("androidx.lifecycle:lifecycle-service:2.10.0")
 
+    // WorkManager for background-safe Auto Change scheduling
+    implementation("androidx.work:work-runtime-ktx:2.10.2")
+
     // Media3 ExoPlayer for video wallpaper playback
     implementation("androidx.media3:media3-exoplayer:1.9.2")
     implementation("androidx.media3:media3-common:1.9.2")
