@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] — 2026-03-18
+
+### Changed
+- README host lifecycle guidance now documents the full cached-engine pattern for wallpaper flows, including explicit cached-engine teardown when the host activity is genuinely finishing.
+- Example Android app `MainActivity` now destroys its cached `FlutterEngine` on real app exit so users do not return to a stale Dart isolate after intentionally closing the app.
+- Package documentation now reflects that Wallpaper Auto Change is already available in the published package, rather than only on the `main` branch.
+
 ## [1.1.0] — 2026-03-17
 
 ### Added

@@ -58,7 +58,7 @@ Add the package:
 
 ```yaml
 dependencies:
-  flutter_wallpaper_plus: ^1.1.0
+  flutter_wallpaper_plus: ^1.1.1
 ```
 
 Install dependencies:
@@ -119,8 +119,6 @@ Notes:
 - This plugin does not provide a separate `setMaterialYouWallpaper(...)` API because that color extraction is handled by Android itself after a normal wallpaper change.
 
 ### Wallpaper Auto Change
-
-Available on the current `main` branch and planned for the next package release.
 
 ```dart
 final result = await FlutterWallpaperPlus.startWallpaperAutoChange(
@@ -345,6 +343,8 @@ behavior, make your `MainActivity` more resilient:
 - Use `RenderMode.texture`
 - Reuse a cached `FlutterEngine`
 - Return `false` from `shouldDestroyEngineWithHost()`
+- Destroy the cached engine when the activity is genuinely finishing so an
+  intentional app exit does not reopen the old Dart isolate
 
 Example `MainActivity.kt`:
 
@@ -361,6 +361,13 @@ import io.flutter.embedding.engine.dart.DartExecutor
 class MainActivity : FlutterActivity() {
   companion object {
     private const val ENGINE_ID = "wallpaper_engine"
+
+    private fun clearCachedEngine() {
+      val cache = FlutterEngineCache.getInstance()
+      val engine = cache.get(ENGINE_ID) ?: return
+      cache.remove(ENGINE_ID)
+      engine.destroy()
+    }
   }
 
   override fun getRenderMode(): RenderMode = RenderMode.texture
@@ -377,8 +384,22 @@ class MainActivity : FlutterActivity() {
   }
 
   override fun shouldDestroyEngineWithHost(): Boolean = false
+
+  override fun onDestroy() {
+    val shouldClearEngine = isFinishing && !isChangingConfigurations
+    super.onDestroy()
+
+    if (shouldClearEngine) {
+      clearCachedEngine()
+    }
+  }
 }
 ```
+
+`shouldDestroyEngineWithHost() = false` keeps the engine alive while Android
+recreates the host activity during wallpaper flows. The extra `onDestroy()`
+cleanup prevents the cached engine from surviving a real user exit, so reopening
+the app starts fresh instead of resuming the old widget tree.
 
 The full working example used by this package is in
 [`example/android/app/src/main/kotlin/com/example/flutter_wallpaper_plus_example/MainActivity.kt`](example/android/app/src/main/kotlin/com/example/flutter_wallpaper_plus_example/MainActivity.kt).
@@ -408,6 +429,14 @@ If your app uses the default `FlutterActivity` setup, this may look like a full
 restart even though the wallpaper apply succeeded. See
 [Host App Lifecycle](#host-app-lifecycle) for the recommended `MainActivity`
 setup.
+
+### Why does my app reopen where the user left off after they closed it?
+
+That happens when you cache a `FlutterEngine` to survive wallpaper-related
+activity recreation, but never destroy it on a genuine app exit. Reuse the
+engine during wallpaper flows, then evict and destroy it in `onDestroy()` when
+`isFinishing && !isChangingConfigurations` is true. See
+[Host App Lifecycle](#host-app-lifecycle) for a copy-paste example.
 
 ### Does this update Material You colors on Android 12+?
 

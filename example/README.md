@@ -6,7 +6,9 @@ The example Android app also includes a resilient `MainActivity` setup that:
 
 - uses `RenderMode.texture`
 - reuses a cached `FlutterEngine`
-- keeps the engine alive across host activity recreation
+- keeps the engine alive across host activity recreation during wallpaper flows
+- destroys the cached engine when the activity is genuinely finishing, so reopening
+  the app starts from a fresh Flutter state
 
 See `example/android/app/src/main/kotlin/com/example/flutter_wallpaper_plus_example/MainActivity.kt`.
 

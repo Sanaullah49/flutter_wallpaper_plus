@@ -12,6 +12,14 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val TAG = "ExampleMainActivity"
         private const val ENGINE_ID = "wallpaper_plus_example_engine"
+
+        private fun clearCachedEngine() {
+            val cache = FlutterEngineCache.getInstance()
+            val engine = cache.get(ENGINE_ID) ?: return
+            cache.remove(ENGINE_ID)
+            Log.d(TAG, "clearCachedEngine: destroying engine=${System.identityHashCode(engine)}")
+            engine.destroy()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,8 +43,17 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy")
+        val shouldClearEngine = isFinishing && !isChangingConfigurations
+        Log.d(
+            TAG,
+            "onDestroy: isFinishing=$isFinishing, " +
+                "isChangingConfigurations=$isChangingConfigurations, " +
+                "shouldClearEngine=$shouldClearEngine",
+        )
         super.onDestroy()
+        if (shouldClearEngine) {
+            clearCachedEngine()
+        }
     }
 
     override fun getRenderMode(): RenderMode {
